@@ -7,11 +7,16 @@ import bodyParser from 'body-parser';
 import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand, generateWordEdit, processEditCommand } from './aiService.js';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
+
+// Simple root endpoint so Render knows server is running
+app.get('/', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 // In-memory storage for documents (replace with database in production)
 let documents = [
