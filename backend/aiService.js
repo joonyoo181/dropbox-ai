@@ -310,6 +310,24 @@ function isEmailTask(description, details) {
 }
 
 /**
+ * Detects if an action item is calendar-related
+ */
+function isCalendarTask(description, details) {
+  const text = `${description} ${details || ''}`.toLowerCase();
+  const hasCalendarKeyword = 
+    text.includes('meeting') ||
+    text.includes('schedule') ||
+    text.includes('call') ||
+    text.includes('appointment') ||
+    text.includes('reminder') ||
+    text.includes('conference');
+  const hasDate = /\d{1,2}\/\d{1,2}/.test(text) || /\d{1,2}-\d{1,2}/.test(text);
+  const hasTime = /\d{1,2}:\d{2}/.test(text) || /\d{1,2}\s?(am|pm)/i.test(text);
+  
+  return hasCalendarKeyword || (hasDate && hasTime);
+}
+
+/**
  * Extracts action items from document content
  */
 export async function extractActionItems(documentId, title, content) {
@@ -367,7 +385,9 @@ If no action items are found, return an empty array.`;
       documentTitle: title,
       createdAt: new Date().toISOString(),
       isEmailTask: isEmailTask(item.description, item.details),
-      emailDraft: null
+      emailDraft: null,
+      isCalendarTask: isCalendarTask(item.description, item.details),
+      calendarEvent: null
     }));
   } catch (error) {
     console.error('Error extracting action items:', error);
@@ -514,6 +534,239 @@ function createMailtoLink(to, subject, body) {
 }
 
 /**
+ * Creates a calendar event from an action item task
+ */
+export async function createCalendarEventFromTask(task, documentContext) {
+  if (!geminiModel && !openai) {
+    return fallbackCalendarEvent(task);
+  }
+
+  try {
+    const today = new Date();
+    const currentDate = today.toISOString().split('T')[0];
+    const dayOfWeek = today.toLocaleDateString('en-US', { weekday: 'long' });
+    const monthName = today.toLocaleDateString('en-US', { month: 'long' });
+    const dayOfMonth = today.getDate();
+    const currentYear = today.getFullYear();
+    
+    const prompt = `You are a calendar event creator. Extract event details from this action item.
+
+Action item: "${task.description}"
+Additional details: "${task.details || 'none'}"
+Document title: "${task.documentTitle || 'Untitled'}"
+Document context: "${documentContext ? documentContext.substring(0, 500) : 'none'}"
+
+CURRENT DATE INFORMATION:
+- Today is: ${dayOfWeek}, ${monthName} ${dayOfMonth}, ${currentYear}
+- Today's date: ${currentDate}
+
+Extract and provide:
+1. Event title (concise and clear)
+2. Start date in YYYY-MM-DD format
+3. Start time in HH:MM 24-hour format (e.g., 14:00 for 2pm)
+4. Duration in minutes (default 60 if not specified)
+5. Description (from context)
+6. Location (if mentioned, otherwise empty)
+7. Is it an all-day event? (true/false)
+
+IMPORTANT DATE CALCULATIONS:
+- For relative dates like "tomorrow", "next week", "next Tuesday", calculate the actual date based on TODAY being ${currentDate} (${dayOfWeek})
+- For specific dates like "12/25", use the current year ${currentYear} unless context suggests otherwise
+- For times like "3pm" convert to 24-hour format
+- If no specific time is given, use 09:00 as default
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "title": "Event title",
+  "startDate": "YYYY-MM-DD",
+  "startTime": "HH:MM",
+  "durationMinutes": 60,
+  "description": "Event description",
+  "location": "Location or empty string",
+  "isAllDay": false
+}`;
+
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+    
+    const eventData = {
+      title: result.title,
+      startDate: result.startDate,
+      startTime: result.startTime,
+      durationMinutes: result.durationMinutes,
+      description: result.description,
+      location: result.location,
+      isAllDay: result.isAllDay
+    };
+    
+    const icsContent = generateICS(eventData);
+    const googleCalendarURL = generateGoogleCalendarURL(eventData);
+    
+    return {
+      ...eventData,
+      icsContent,
+      googleCalendarURL,
+      createdAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error creating calendar event:', error);
+    return fallbackCalendarEvent(task);
+  }
+}
+
+/**
+ * Fallback calendar event when AI is not available
+ */
+function fallbackCalendarEvent(task) {
+  const today = new Date();
+  let startDate = today.toISOString().split('T')[0];
+  let startTime = '09:00';
+  
+  const description = task.description.toLowerCase();
+  
+  // Check for relative dates
+  if (description.includes('tomorrow')) {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    startDate = tomorrow.toISOString().split('T')[0];
+  } else if (description.includes('next week')) {
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    startDate = nextWeek.toISOString().split('T')[0];
+  }
+  
+  // Try to extract specific date (MM/DD format)
+  const dateMatch = task.description.match(/(\d{1,2})\/(\d{1,2})/);
+  if (dateMatch) {
+    const month = dateMatch[1].padStart(2, '0');
+    const day = dateMatch[2].padStart(2, '0');
+    startDate = `${today.getFullYear()}-${month}-${day}`;
+  }
+  
+  // Try to extract time
+  const timeMatch = task.description.match(/(\d{1,2}):?(\d{2})?\s?(am|pm)/i);
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1]);
+    const minutes = timeMatch[2] || '00';
+    const meridiem = timeMatch[3]?.toLowerCase();
+    
+    if (meridiem === 'pm' && hours !== 12) hours += 12;
+    if (meridiem === 'am' && hours === 12) hours = 0;
+    
+    startTime = `${hours.toString().padStart(2, '0')}:${minutes}`;
+  }
+  
+  const title = task.description.substring(0, 50);
+  const eventData = {
+    title,
+    startDate,
+    startTime,
+    durationMinutes: 60,
+    description: task.details || '',
+    location: '',
+    isAllDay: false
+  };
+  
+  const icsContent = generateICS(eventData);
+  const googleCalendarURL = generateGoogleCalendarURL(eventData);
+  
+  return {
+    ...eventData,
+    icsContent,
+    googleCalendarURL,
+    createdAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Generates Google Calendar URL for event
+ */
+function generateGoogleCalendarURL(event) {
+  const [year, month, day] = event.startDate.split('-');
+  const [hours, minutes] = event.startTime.split(':');
+  
+  const startDateTime = new Date(year, month - 1, day, hours, minutes);
+  const endDateTime = new Date(startDateTime.getTime() + event.durationMinutes * 60000);
+  
+  const formatGoogleDate = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const s = String(date.getSeconds()).padStart(2, '0');
+    return `${y}${m}${d}T${h}${min}${s}`;
+  };
+  
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: event.title,
+    dates: `${formatGoogleDate(startDateTime)}/${formatGoogleDate(endDateTime)}`,
+    details: event.description,
+    location: event.location
+  });
+  
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+/**
+ * Generates ICS file content for calendar event
+ */
+function generateICS(event) {
+  const now = new Date();
+  const uid = `${now.getTime()}@doceditor`;
+  
+  // Parse start date and time
+  const [year, month, day] = event.startDate.split('-');
+  const [hours, minutes] = event.startTime.split(':');
+  
+  const startDateTime = new Date(year, month - 1, day, hours, minutes);
+  const endDateTime = new Date(startDateTime.getTime() + event.durationMinutes * 60000);
+  
+  // Format dates for ICS (YYYYMMDDTHHMMSS)
+  const formatICSDate = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const s = String(date.getSeconds()).padStart(2, '0');
+    return `${y}${m}${d}T${h}${min}${s}`;
+  };
+  
+  const formatAllDayDate = (dateStr) => {
+    const [y, m, d] = dateStr.split('-');
+    return `${y}${m}${d}`;
+  };
+  
+  const startStr = event.isAllDay ? formatAllDayDate(event.startDate) : formatICSDate(startDateTime);
+  const endStr = event.isAllDay ? formatAllDayDate(event.startDate) : formatICSDate(endDateTime);
+  const dateType = event.isAllDay ? ';VALUE=DATE' : '';
+  
+  // Escape special characters in ICS format
+  const escapeICS = (str) => {
+    return str.replace(/[\\,;]/g, '\\$&').replace(/\n/g, '\\n');
+  };
+  
+  return `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//DocEditor//Calendar//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${formatICSDate(now)}
+DTSTART${dateType}:${startStr}
+DTEND${dateType}:${endStr}
+SUMMARY:${escapeICS(event.title)}
+DESCRIPTION:${escapeICS(event.description)}
+LOCATION:${escapeICS(event.location)}
+STATUS:CONFIRMED
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR`;
+}
+
+/**
  * Fallback action item extraction using pattern matching
  */
 function fallbackExtractActionItems(documentId, title, content) {
@@ -534,7 +787,9 @@ function fallbackExtractActionItems(documentId, title, content) {
       documentTitle: title,
       createdAt: new Date().toISOString(),
       isEmailTask: isEmailTask(description, ''),
-      emailDraft: null
+      emailDraft: null,
+      isCalendarTask: isCalendarTask(description, ''),
+      calendarEvent: null
     });
   }
 
