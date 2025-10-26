@@ -80,6 +80,32 @@ let documents = [
       documentType: 'essay',
       summary: 'An essay about vaccination programs and public health'
     }
+  },
+  {
+    id: '4',
+    title: 'response to sylvia plath',
+    content: `When I read The Bell Jar by Sylvia Plath, one quote — the quote that has stuck with me and probably everybody else who read it goes as follows:
+
+  <br>“I saw my life branching out before me like the green fig tree in the story. From the tip of every branch, like a fat purple fig, a wonderful future beckoned and winked. One fig was a husband and a happy home and children, and another fig was a famous poet and another fig was a brilliant professor, and another fig was Ee Gee, the amazing editor, and another fig was Europe and Africa and South America, and another fig was Constantin and Socrates and Attila and a pack of other lovers with queer names and offbeat professions, and another fig was an Olympic lady crew champion, and beyond and above these figs were many more figs I couldn't quite make out. I saw myself sitting in the crotch of this fig tree, starving to death, just because I couldn't make up my mind which of the figs I would choose. I wanted each and every one of them, but choosing one meant losing all the rest, and, as I sat there, unable to decide, the figs began to wrinkle and go black, and, one by one, they plopped to the ground at my feet.”
+
+  <br>My figs are not the same as hers, but they constantly grow outwards. A part of me wants to become a writer and finally finish writing that sci-fi book and spend the rest of my life writing poetry on the value & meaning & fragility of life; a part of me wants to go into the start-up world and make something of value that will change things in the world and if not the world then maybe for just one person; a part of me wants to become a quizzer and kill it on Jeopardy since Who Wants to be a Millionaire now only features … millionaires; a part of me wants to go into politics and make it on the Hill where I can claim to be a “just politician” and truly be one. But each one of these dreams are so big and require so much time and effort that doing each one of them is unfeasible.`,
+    createdAt: new Date('2025-01-25').toISOString(),
+    updatedAt: new Date('2025-01-25').toISOString(),
+    comments: [],
+    tabs: {
+      summary: [],
+      definitions: [],
+      questions: [],
+      notes: [],
+      edits: [],
+      versions: []
+    },
+    customTabs: [],
+    metadata: {
+      topics: ['slyvia path', 'substack', 'post'],
+      documentType: 'blog',
+      summary: 'A response to quote from slyvia path'
+    }
   }
 ];
 

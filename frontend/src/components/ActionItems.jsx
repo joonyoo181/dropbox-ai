@@ -82,19 +82,30 @@ function ActionItems({ actionItems, onUpdate }) {
 
   const handleAcceptEdit = async (item) => {
     if (!item.wordEdit) return;
-    
+
     try {
       // Get the document
       const docResponse = await axios.get(`/api/documents/${item.documentId}`);
       const document = docResponse.data;
-      
+
+      // Helper to decode HTML entities
+      const decodeHtmlEntities = (text) => {
+        const textarea = window.document.createElement('textarea');
+        textarea.innerHTML = text;
+        return textarea.value;
+      };
+
       // Normalize whitespace function
       const normalizeText = (text) => {
         return text.replace(/\s+/g, ' ').trim();
       };
-      
-      const normalizedTarget = normalizeText(item.wordEdit.targetText);
-      const normalizedSuggestion = normalizeText(item.wordEdit.suggestedEdit);
+
+      // Decode HTML entities before normalizing
+      const decodedTarget = decodeHtmlEntities(item.wordEdit.targetText);
+      const decodedSuggestion = decodeHtmlEntities(item.wordEdit.suggestedEdit);
+
+      const normalizedTarget = normalizeText(decodedTarget);
+      const normalizedSuggestion = normalizeText(decodedSuggestion);
       
       console.log('Target (normalized):', normalizedTarget);
       console.log('Suggestion (normalized):', normalizedSuggestion);
@@ -105,42 +116,57 @@ function ActionItems({ actionItems, onUpdate }) {
       
       let replaced = false;
       
-      // Walk through all text nodes
-      const walker = window.document.createTreeWalker(
+      // Get all text content from the document to search across node boundaries
+      const bodyText = doc.body.textContent;
+      const normalizedBodyText = normalizeText(bodyText);
+
+      console.log('Body text (normalized):', normalizedBodyText);
+      console.log('Searching for:', normalizedTarget);
+
+      // Check if target exists in the document at all (case-insensitive)
+      if (!normalizedBodyText.toLowerCase().includes(normalizedTarget.toLowerCase())) {
+        console.error('Target text not found in document');
+        console.log('Document preview:', normalizedBodyText.substring(0, 500));
+        alert('Could not find the text to replace. Please try editing manually.');
+        return;
+      }
+
+      // Walk through all text nodes using the parsed document
+      const walker = doc.createTreeWalker(
         doc.body,
         NodeFilter.SHOW_TEXT,
         null,
         false
       );
-      
+
       let node;
       const nodesToReplace = [];
-      
+
       // First pass: collect all nodes that need replacement
       while ((node = walker.nextNode())) {
         const normalizedNodeText = normalizeText(node.textContent);
-        if (normalizedNodeText.includes(normalizedTarget)) {
+        if (normalizedNodeText.toLowerCase().includes(normalizedTarget.toLowerCase())) {
           nodesToReplace.push({
             node: node,
             originalText: node.textContent
           });
         }
       }
-      
+
       // Second pass: do the replacements
       nodesToReplace.forEach(({ node, originalText }) => {
         // Try to preserve original spacing/formatting as much as possible
         const normalizedNodeText = normalizeText(originalText);
-        
-        // Simple replacement: replace normalized version
-        if (normalizedNodeText === normalizedTarget) {
+
+        // Simple replacement: replace normalized version (case-insensitive)
+        if (normalizedNodeText.toLowerCase() === normalizedTarget.toLowerCase()) {
           // Whole node is the target, replace entirely
           node.textContent = normalizedSuggestion;
           replaced = true;
           console.log('Replaced entire node');
-        } else if (normalizedNodeText.includes(normalizedTarget)) {
+        } else if (normalizedNodeText.toLowerCase().includes(normalizedTarget.toLowerCase())) {
           // Target is part of the node
-          // Try to replace while preserving some formatting
+          // Try to replace while preserving some formatting (case-insensitive)
           const newText = originalText.replace(
             new RegExp(normalizedTarget.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
             normalizedSuggestion
@@ -150,42 +176,71 @@ function ActionItems({ actionItems, onUpdate }) {
           console.log('Replaced within node');
         }
       });
-      
+
+      // Fallback: If text wasn't found in individual nodes, it may span multiple elements
+      // Try HTML-level replacement as last resort
       if (!replaced) {
-        console.error('No replacement made');
-        alert('Could not find the text to replace. Please try editing manually.');
+        console.log('Text not found in individual nodes, trying HTML replacement');
+        const currentHTML = doc.body.innerHTML;
+
+        // Create a regex that's more flexible with whitespace and HTML tags
+        // This will match the target text even if there are HTML tags in between
+        const targetWords = normalizedTarget.split(/\s+/);
+        const flexiblePattern = targetWords
+          .map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('(?:\\s|<[^>]*>)+'); // Allow whitespace or HTML tags between words
+
+        const regex = new RegExp(flexiblePattern, 'gi');
+
+        // Get the plain text to find the exact match
+        const plainText = doc.body.textContent;
+        const normalizedPlainText = normalizeText(plainText);
+
+        if (normalizedPlainText.toLowerCase().includes(normalizedTarget.toLowerCase())) {
+          // Try a simpler approach: replace in innerHTML directly
+          // This works when text is continuous but may have formatting tags
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = currentHTML;
+          tempDiv.innerHTML = tempDiv.innerHTML.replace(regex, normalizedSuggestion);
+          doc.body.innerHTML = tempDiv.innerHTML;
+          replaced = true;
+          console.log('Replaced via HTML pattern matching');
+        }
+      }
+
+      if (!replaced) {
+        console.error('No replacement made after all attempts');
+        alert('Could not find the text to replace. The text may have been modified or is formatted in an unexpected way. Please try editing manually.');
         return;
       }
       
-      // Now remove the TODO line from the document
-      const todoWalker = window.document.createTreeWalker(
+      // Now remove the TODO comment from the document
+      const todoWalker = doc.createTreeWalker(
         doc.body,
         NodeFilter.SHOW_TEXT,
         null,
         false
       );
-      
+
       let todoNode;
-      const todosToRemove = [];
-      
-      // Find nodes containing the TODO
+
+      // Find and remove TODO comments
       while ((todoNode = todoWalker.nextNode())) {
-        const nodeText = todoNode.textContent.trim();
-        // Check if this node contains the TODO for this specific task
+        const nodeText = todoNode.textContent;
+        // Check if this node contains a TODO comment for this specific task
         if (nodeText.includes('TODO') && nodeText.includes(item.description.substring(0, 30))) {
-          todosToRemove.push(todoNode);
+          // Remove just the TODO comment, not the whole paragraph
+          // Match patterns like: " (TODO: ...)" or " [TODO: ...]"
+          const todoPattern = /\s*[\(\[]TODO:.*?[\)\]]/gi;
+          const cleanedText = nodeText.replace(todoPattern, '');
+
+          // Only update if something was actually removed
+          if (cleanedText !== nodeText) {
+            todoNode.textContent = cleanedText;
+            console.log('Removed TODO comment from text');
+          }
         }
       }
-      
-      // Remove TODO nodes and their parent elements if they become empty
-      todosToRemove.forEach((node) => {
-        const parent = node.parentElement;
-        if (parent) {
-          // Remove the entire parent element (likely a <p> tag)
-          parent.remove();
-          console.log('Removed TODO line');
-        }
-      });
       
       const updatedContent = doc.body.innerHTML;
       

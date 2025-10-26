@@ -344,7 +344,7 @@ function isWordEditTask(description, details) {
   const editKeywords = [
     'edit', 'rewrite', 'revise', 'improve', 'fix', 'update',
     'rephrase', 'clarify', 'enhance', 'polish', 'proofread',
-    'change', 'modify', 'adjust', 'refine'
+    'change', 'modify', 'adjust', 'refine', 'reword'
   ];
   
   const contentKeywords = [
@@ -830,10 +830,12 @@ IMPORTANT:
 - If the task mentions "introduction", "conclusion", "paragraph 2", etc., find that specific section
 - Improve grammar, clarity, tone, and engagement
 - Keep the same general meaning unless asked to change it
+- DO NOT include any TODO comments (like "(TODO: ...)" or "[TODO: ...]") in the targetText
+- The targetText should be ONLY the actual text that needs editing, without any TODO annotations
 
 Respond ONLY with a JSON object in this exact format:
 {
-  "targetText": "the original text section you identified",
+  "targetText": "the original text section you identified (WITHOUT any TODO comments)",
   "suggestedEdit": "your improved version of the text",
   "explanation": "brief explanation of what you changed and why",
   "location": "where in document (e.g., 'introduction', 'second paragraph', 'conclusion')"
@@ -841,10 +843,16 @@ Respond ONLY with a JSON object in this exact format:
 
     const text = await callAI(prompt);
     const result = JSON.parse(text);
-    
+
+    // Helper function to remove TODO comments
+    const removeTodoComments = (text) => {
+      // Remove patterns like (TODO: ...) or [TODO: ...]
+      return text.replace(/\s*[\(\[]TODO:.*?[\)\]]/gi, '').trim();
+    };
+
     return {
-      targetText: result.targetText,
-      suggestedEdit: result.suggestedEdit,
+      targetText: removeTodoComments(result.targetText),
+      suggestedEdit: removeTodoComments(result.suggestedEdit),
       explanation: result.explanation,
       location: result.location,
       createdAt: new Date().toISOString()
@@ -1008,5 +1016,22 @@ Respond ONLY with valid JSON in this format:
  * Strips HTML tags from content
  */
 function stripHtml(html) {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  // First decode HTML entities
+  const decodeHtmlEntities = (text) => {
+    const entities = {
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&#39;': "'",
+      '&apos;': "'",
+      '&nbsp;': ' '
+    };
+    return text.replace(/&[a-z]+;|&#\d+;/gi, (match) => entities[match.toLowerCase()] || match);
+  };
+
+  // Remove HTML tags, decode entities, normalize whitespace
+  const withoutTags = html.replace(/<[^>]*>/g, ' ');
+  const decoded = decodeHtmlEntities(withoutTags);
+  return decoded.replace(/\s+/g, ' ').trim();
 }
