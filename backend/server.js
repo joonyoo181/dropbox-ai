@@ -21,6 +21,16 @@ let documents = [
     content: '<h1>Welcome to DocEditor</h1><p>This is your first document. Start editing!</p>',
     createdAt: new Date('2025-01-15').toISOString(),
     updatedAt: new Date('2025-01-15').toISOString(),
+    comments: [],
+    tabs: {
+      summary: [],
+      definitions: [],
+      questions: [],
+      notes: [],
+      edits: [],
+      versions: []
+    },
+    customTabs: [],
     metadata: {
       topics: ['introduction', 'getting started'],
       documentType: 'document',
@@ -33,6 +43,16 @@ let documents = [
     content: '<h2>Team Meeting - Q1 2024</h2><ul><li>Discuss project goals</li><li>Review timeline</li></ul>',
     createdAt: new Date('2024-12-02').toISOString(),
     updatedAt: new Date('2024-12-02').toISOString(),
+    comments: [],
+    tabs: {
+      summary: [],
+      definitions: [],
+      questions: [],
+      notes: [],
+      edits: [],
+      versions: []
+    },
+    customTabs: [],
     metadata: {
       topics: ['meeting', 'planning', 'Q1'],
       documentType: 'meeting_notes',
@@ -45,6 +65,16 @@ let documents = [
     content: '<h1>The Impact of Vaccination Programs on Public Health</h1><p>In this essay, I will examine the profound effects of vaccination programs on public health outcomes...</p><h2>Introduction</h2><p>Vaccination programs have been instrumental in reducing infectious diseases worldwide.</p>',
     createdAt: new Date('2024-11-20').toISOString(),
     updatedAt: new Date('2024-12-01').toISOString(),
+    comments: [],
+    tabs: {
+      summary: [],
+      definitions: [],
+      questions: [],
+      notes: [],
+      edits: [],
+      versions: []
+    },
+    customTabs: [],
     metadata: {
       topics: ['public health', 'vaccination', 'healthcare'],
       documentType: 'essay',
@@ -82,6 +112,16 @@ app.post('/api/documents', async (req, res) => {
     id: Date.now().toString(),
     title: req.body.title || 'Untitled Document',
     content: req.body.content || '',
+    comments: [],
+    tabs: {
+      summary: [],
+      definitions: [],
+      questions: [],
+      notes: [],
+      edits: [],
+      versions: []
+    },
+    customTabs: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     metadata: {
@@ -116,6 +156,9 @@ app.put('/api/documents/:id', async (req, res) => {
     ...documents[docIndex],
     title: req.body.title || documents[docIndex].title,
     content: req.body.content !== undefined ? req.body.content : documents[docIndex].content,
+    comments: req.body.comments !== undefined ? req.body.comments : documents[docIndex].comments,
+    tabs: req.body.tabs !== undefined ? req.body.tabs : documents[docIndex].tabs,
+    customTabs: req.body.customTabs !== undefined ? req.body.customTabs : documents[docIndex].customTabs,
     updatedAt: new Date().toISOString()
   };
 
