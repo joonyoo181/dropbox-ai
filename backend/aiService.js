@@ -854,6 +854,55 @@ export async function processAICommand(highlightedText, tabType, customPrompt = 
 }
 
 /**
+ * Processes edit commands - suggests edits to the highlighted text
+ * @param {string} originalText - The original text to edit
+ * @param {string} editInstruction - The user's editing instruction
+ * @returns {Promise<Object>} Object containing editedText and explanation
+ */
+export async function processEditCommand(originalText, editInstruction) {
+  if (!geminiModel && !openai) {
+    return {
+      editedText: originalText,
+      explanation: 'AI not available. Please configure an AI provider.'
+    };
+  }
+
+  try {
+    const prompt = `You are a text editing assistant. The user wants you to edit the following text according to their instruction.
+
+Original text: "${originalText}"
+
+Editing instruction: "${editInstruction}"
+
+Apply the requested changes to the text. Respond with a JSON object containing:
+1. "editedText": The edited version of the text with the changes applied
+2. "explanation": A brief explanation (1-2 sentences) of what changes you made
+
+Important: Keep the edited text concise and focused on the requested changes only.
+
+Respond ONLY with valid JSON in this format:
+{
+  "editedText": "the edited text here",
+  "explanation": "brief explanation of changes"
+}`;
+
+    const responseText = await callAI(prompt, true); // Use JSON mode
+    const parsed = JSON.parse(responseText);
+
+    return {
+      editedText: parsed.editedText || originalText,
+      explanation: parsed.explanation || 'Text edited as requested'
+    };
+  } catch (error) {
+    console.error('Error processing edit command:', error);
+    return {
+      editedText: originalText,
+      explanation: `Error processing edit request: ${error.message}`
+    };
+  }
+}
+
+/**
  * Strips HTML tags from content
  */
 function stripHtml(html) {

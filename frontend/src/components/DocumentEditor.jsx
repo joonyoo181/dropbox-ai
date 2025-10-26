@@ -46,7 +46,8 @@ function DocumentEditor() {
   const [tabs, setTabs] = useState({
     summary: [],
     definitions: [],
-    questions: []
+    questions: [],
+    edits: []
   });
   const [customTabs, setCustomTabs] = useState([]);
   const [activeTab, setActiveTab] = useState('summary');
@@ -136,6 +137,31 @@ function DocumentEditor() {
       }
     };
   }, [id]);
+
+  // Restore highlights when document loads or tabs change
+  useEffect(() => {
+    const quill = quillRef.current?.getEditor();
+    if (!quill || loading) return;
+
+    // Small delay to ensure content is loaded
+    const timeoutId = setTimeout(() => {
+      // Get all items from all tabs (including edits)
+      const allItems = [
+        ...Object.values(tabs).flat(),
+        ...customTabs.flatMap(t => t.items)
+      ];
+
+      // Re-apply all highlights
+      allItems.forEach(item => {
+        if (item.position !== undefined && item.length && !hiddenHighlightTabs.has(item.tabId)) {
+          const lightColor = getTabColor(item.tabId, false);
+          quill.formatText(item.position, item.length, 'background', lightColor);
+        }
+      });
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [tabs, customTabs, loading, hiddenHighlightTabs, getTabColor]);
 
   // Scroll to latest item when created
   useEffect(() => {
@@ -361,7 +387,11 @@ function DocumentEditor() {
       let customTabMatch = null;
 
       // Check built-in commands FIRST (with priority for /ai variants)
-      if (cmd.startsWith('s/ai')) {
+      if (cmd.startsWith('e/ai')) {
+        tabName = 'edits';
+        useAI = true;
+        customPrompt = cmd.substring(4).trim(); // Everything after 'e/ai'
+      } else if (cmd.startsWith('s/ai')) {
         tabName = 'summary';
         useAI = true;
         customPrompt = cmd.substring(4).trim(); // Everything after 's/ai'
@@ -430,19 +460,35 @@ function DocumentEditor() {
       console.log('Current customTabs state:', customTabs);
 
       // Execute AI command if needed
+      let editedText = null;
+      let explanation = null;
+
       if (useAI) {
         isAIGenerated = true;
 
         try {
-          // Call the AI API to process the command
-          const response = await axios.post('/api/ai/process-command', {
-            highlightedText: selectedText,
-            tabType: tabName,
-            customPrompt: customPrompt || ''
-          });
+          if (tabName === 'edits') {
+            // Call the edit API for edit commands
+            const response = await axios.post('/api/ai/process-edit', {
+              originalText: selectedText,
+              editInstruction: customPrompt || 'improve this text'
+            });
 
-          resultText = response.data.response;
-          setAiResponse(resultText);
+            editedText = response.data.editedText;
+            explanation = response.data.explanation;
+            resultText = editedText;
+            setAiResponse(explanation);
+          } else {
+            // Call the regular AI API for other commands
+            const response = await axios.post('/api/ai/process-command', {
+              highlightedText: selectedText,
+              tabType: tabName,
+              customPrompt: customPrompt || ''
+            });
+
+            resultText = response.data.response;
+            setAiResponse(resultText);
+          }
         } catch (error) {
           console.error('Error calling AI API:', error);
           resultText = 'Error: Failed to process AI command. Please try again.';
@@ -461,7 +507,13 @@ function DocumentEditor() {
         createdAt: new Date().toISOString(),
         isAIGenerated,
         isManualComment: !useAI && customPrompt,  // Flag for manual comments
-        tabId: tabName
+        tabId: tabName,
+        // Edit-specific fields
+        ...(tabName === 'edits' && {
+          editedText,
+          originalText: selectedText,
+          explanation
+        })
       };
 
       // Apply highlight to the selected text (light color)
@@ -532,8 +584,12 @@ function DocumentEditor() {
     if (!quill) return;
 
     // Replace original text with edited text
+    const textToInsert = edit.editedText || edit.text;
     quill.deleteText(edit.position, edit.length);
-    quill.insertText(edit.position, edit.text);
+    quill.insertText(edit.position, textToInsert);
+
+    // Remove the highlight
+    quill.formatText(edit.position, textToInsert.length, 'background', false);
 
     // Update content
     setContent(quill.root.innerHTML);
@@ -545,8 +601,8 @@ function DocumentEditor() {
     };
 
     setTabs(updatedTabs);
-    saveDocument(title, quill.root.innerHTML, updatedTabs);
-  }, [tabs, title]);
+    saveDocument(title, quill.root.innerHTML, updatedTabs, customTabs);
+  }, [tabs, title, customTabs]);
 
   // Delete a tab item and remove its highlight
   const handleDeleteTabItem = useCallback((item, tabId) => {
@@ -849,7 +905,11 @@ function DocumentEditor() {
                   ...item,
                   position: newPosition,
                   length: newLength,
-                  highlightedText: updatedText
+                  highlightedText: updatedText,
+                  // For edits, also update originalText to reflect the new content
+                  ...(tabKey === 'edits' && item.originalText && {
+                    originalText: updatedText
+                  })
                 });
                 highlightsChanged = true;
               }
@@ -910,7 +970,11 @@ function DocumentEditor() {
                   ...item,
                   position: newPosition,
                   length: newLength,
-                  highlightedText: updatedText
+                  highlightedText: updatedText,
+                  // For edits in custom tabs, also update originalText
+                  ...(item.originalText && {
+                    originalText: updatedText
+                  })
                 });
                 highlightsChanged = true;
               }
@@ -937,7 +1001,7 @@ function DocumentEditor() {
         }
       }
 
-      // If there was an insertion, shift all highlights that come after it
+      // If there was an insertion, shift all highlights that come after it OR update text if insertion is within
       if (insertionStart >= 0 && insertionLength > 0) {
         let highlightsChanged = false;
 
@@ -945,8 +1009,27 @@ function DocumentEditor() {
         const updatedTabs = { ...tabs };
         Object.keys(updatedTabs).forEach(tabKey => {
           const updatedItems = updatedTabs[tabKey].map(item => {
-            // If highlight starts at or after insertion point, shift it forward
-            if (item.position >= insertionStart) {
+            const itemStart = item.position;
+            const itemEnd = item.position + item.length;
+
+            // Check if insertion is within this highlight
+            if (insertionStart > itemStart && insertionStart < itemEnd) {
+              // Insertion within the highlight - expand it and update text
+              highlightsChanged = true;
+              const newLength = item.length + insertionLength;
+              const updatedText = quill.getText(item.position, newLength);
+
+              return {
+                ...item,
+                length: newLength,
+                highlightedText: updatedText,
+                // For edits, also update originalText to reflect the new content
+                ...(tabKey === 'edits' && item.originalText && {
+                  originalText: updatedText
+                })
+              };
+            } else if (item.position >= insertionStart) {
+              // Highlight starts at or after insertion point - shift it forward
               highlightsChanged = true;
               return {
                 ...item,
@@ -961,7 +1044,27 @@ function DocumentEditor() {
         // Update custom tabs
         const updatedCustomTabs = customTabs.map(tab => {
           const updatedItems = tab.items.map(item => {
-            if (item.position >= insertionStart) {
+            const itemStart = item.position;
+            const itemEnd = item.position + item.length;
+
+            // Check if insertion is within this highlight
+            if (insertionStart > itemStart && insertionStart < itemEnd) {
+              // Insertion within the highlight - expand it and update text
+              highlightsChanged = true;
+              const newLength = item.length + insertionLength;
+              const updatedText = quill.getText(item.position, newLength);
+
+              return {
+                ...item,
+                length: newLength,
+                highlightedText: updatedText,
+                // For edits in custom tabs, also update originalText
+                ...(item.originalText && {
+                  originalText: updatedText
+                })
+              };
+            } else if (item.position >= insertionStart) {
+              // Highlight starts at or after insertion point - shift it forward
               highlightsChanged = true;
               return {
                 ...item,
@@ -1452,6 +1555,16 @@ function DocumentEditor() {
               </svg>
               <span>Questions</span>
             </button>
+            <button
+              className={`tab-btn ${activeTab === 'edits' ? 'active' : ''}`}
+              onClick={() => setActiveTab('edits')}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>Edits</span>
+            </button>
 
             {/* Custom Tabs */}
             {customTabs.map((customTab) => (
@@ -1562,28 +1675,85 @@ function DocumentEditor() {
                         style={{ cursor: 'pointer' }}
                         ref={item.id === latestItemId ? latestItemRef : null}
                       >
-                        {item.highlightedText && (
-                          <div className="item-highlighted-text">
-                            <strong>Highlighted Text:</strong> {item.highlightedText}
-                          </div>
-                        )}
-                        {item.isManualComment && item.prompt ? (
-                          <div className="tab-card-text">
-                            {item.prompt}
-                          </div>
-                        ) : item.isAIGenerated ? (
+                        {/* Render edit cards differently */}
+                        {activeTab === 'edits' && item.editedText ? (
                           <>
+                            {item.highlightedText && (
+                              <div className="item-highlighted-text">
+                                <strong>Highlighted Text:</strong> {item.highlightedText}
+                              </div>
+                            )}
                             {item.prompt && (
                               <div className="item-prompt">
                                 {item.prompt}
                               </div>
                             )}
-                            <div className="tab-card-text">
-                              {item.text}
+                            <div className="edit-diff-container">
+                              <div className="edit-section">
+                                <div className="edit-label">Suggested Edit:</div>
+                                <div className="edit-text edited-text">{item.editedText}</div>
+                              </div>
+                              {item.explanation && (
+                                <div className="edit-explanation">
+                                  {item.explanation}
+                                </div>
+                              )}
+                            </div>
+                            <div className="edit-actions">
+                              <button
+                                className="edit-accept-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApplyEdit(item.id);
+                                }}
+                                title="Accept changes"
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                  <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                Accept
+                              </button>
+                              <button
+                                className="edit-reject-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTabItem(item, activeTab);
+                                }}
+                                title="Reject changes"
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                Reject
+                              </button>
                             </div>
                           </>
                         ) : (
-                          <div className="tab-card-text">{item.text}</div>
+                          <>
+                            {item.highlightedText && (
+                              <div className="item-highlighted-text">
+                                <strong>Highlighted Text:</strong> {item.highlightedText}
+                              </div>
+                            )}
+                            {item.isManualComment && item.prompt ? (
+                              <div className="tab-card-text">
+                                {item.prompt}
+                              </div>
+                            ) : item.isAIGenerated ? (
+                              <>
+                                {item.prompt && (
+                                  <div className="item-prompt">
+                                    {item.prompt}
+                                  </div>
+                                )}
+                                <div className="tab-card-text">
+                                  {item.text}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="tab-card-text">{item.text}</div>
+                            )}
+                          </>
                         )}
                         <div
                           className="tab-card-indicator"
@@ -1667,7 +1837,8 @@ function DocumentEditor() {
             <div className="command-hints">
               <div className="hint"><kbd>s/ai</kbd> Summary</div>
               <div className="hint"><kbd>d/ai</kbd> Definition</div>
-              <div className="hint"><kbd>q/ai</kbd> Answer</div>
+              <div className="hint"><kbd>q/ai</kbd> Question</div>
+              <div className="hint"><kbd>e/ai</kbd> Edit</div>
               <div className="hint"><kbd>Esc</kbd> Cancel</div>
             </div>
           </div>
