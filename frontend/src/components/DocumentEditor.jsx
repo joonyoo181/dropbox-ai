@@ -15,6 +15,7 @@ function DocumentEditor() {
   const [saving, setSaving] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(null);
   const saveTimeoutRef = useRef(null);
   const quillRef = useRef(null);
 
@@ -67,6 +68,7 @@ function DocumentEditor() {
 
     // Clear suggestion when content changes
     setSuggestion(null);
+    setCursorPosition(null);
 
     // Auto-save after 1 second of inactivity
     if (saveTimeoutRef.current) {
@@ -76,6 +78,49 @@ function DocumentEditor() {
       saveDocument(title, value);
     }, 1000);
   };
+
+  // Compute word-level differences between original and suggested text
+  const computeWordDiff = useCallback((originalText, suggestedText) => {
+    const originalWords = originalText.split(/(\s+)/);
+    const suggestedWords = suggestedText.split(/(\s+)/);
+
+    // Simple LCS-based diff algorithm
+    const dp = Array(originalWords.length + 1).fill(null).map(() =>
+      Array(suggestedWords.length + 1).fill(0)
+    );
+
+    // Build LCS matrix
+    for (let i = 1; i <= originalWords.length; i++) {
+      for (let j = 1; j <= suggestedWords.length; j++) {
+        if (originalWords[i - 1] === suggestedWords[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+        } else {
+          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        }
+      }
+    }
+
+    // Backtrack to find differences
+    const diff = [];
+    let i = originalWords.length;
+    let j = suggestedWords.length;
+
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && originalWords[i - 1] === suggestedWords[j - 1]) {
+        diff.unshift({ type: 'unchanged', word: originalWords[i - 1] });
+        i--;
+        j--;
+      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+        diff.unshift({ type: 'added', word: suggestedWords[j - 1] });
+        j--;
+      } else if (i > 0) {
+        diff.unshift({ type: 'removed', word: originalWords[i - 1] });
+        i--;
+      }
+    }
+
+    return diff;
+  }, []);
 
   // Extract text from cursor position to last sentence-ending punctuation
   const getTextToPreviousBullet = useCallback(() => {
@@ -141,6 +186,19 @@ function DocumentEditor() {
       return;
     }
 
+    // Get cursor position for inline display
+    const quill = quillRef.current?.getEditor();
+    if (quill) {
+      const selection = quill.getSelection();
+      if (selection) {
+        const bounds = quill.getBounds(selection.index);
+        setCursorPosition({
+          top: bounds.top + bounds.height,
+          left: bounds.left
+        });
+      }
+    }
+
     setLoadingSuggestion(true);
     try {
       const response = await axios.post('/api/suggest', {
@@ -168,18 +226,20 @@ function DocumentEditor() {
 
     // Replace the text
     quill.deleteText(suggestion.startIndex, suggestion.endIndex - suggestion.startIndex);
-    quill.insertText(suggestion.startIndex, suggestion.suggestedText);
+    quill.insertText(suggestion.startIndex, " " + suggestion.suggestedText);
 
     // Update content state
     setContent(quill.root.innerHTML);
 
-    // Clear suggestion
+    // Clear suggestion and cursor position
     setSuggestion(null);
+    setCursorPosition(null);
   }, [suggestion]);
 
   // Reject the suggestion
   const rejectSuggestion = useCallback(() => {
     setSuggestion(null);
+    setCursorPosition(null);
   }, []);
 
   // Keyboard shortcut handler
@@ -274,27 +334,60 @@ function DocumentEditor() {
               formats={formats}
               placeholder="Start writing..."
             />
-            {suggestion && (
-              <div className="suggestion-overlay">
+            {suggestion && cursorPosition && (
+              <div
+                className="suggestion-overlay"
+                style={{
+                  top: `${cursorPosition.top}px`,
+                  left: `${cursorPosition.left}px`
+                }}
+              >
                 <div className="suggestion-content">
-                  <span className="original-text">{suggestion.originalText}</span>
-                  <span className="suggested-text">{suggestion.suggestedText}</span>
+                  <div className="diff-text">
+                    {computeWordDiff(suggestion.originalText, suggestion.suggestedText).map((part, index) => {
+                      // Check if this is whitespace
+                      const isWhitespace = /^\s+$/.test(part.word);
+
+                      if (isWhitespace) {
+                        // Render whitespace directly without a span
+                        return part.word;
+                      } else if (part.type === 'removed') {
+                        return (
+                          <span key={index} className="word-removed">
+                            {part.word}
+                          </span>
+                        );
+                      } else if (part.type === 'added') {
+                        return (
+                          <span key={index} className="word-added">
+                            {part.word}
+                          </span>
+                        );
+                      } else {
+                        return (
+                          <span key={index} className="word-unchanged">
+                            {part.word}
+                          </span>
+                        );
+                      }
+                    })}
+                  </div>
                   <div className="suggestion-actions">
                     <button
                       className="suggestion-btn accept-btn"
                       onClick={acceptSuggestion}
-                      title="Accept suggestion (Enter)"
+                      title="Accept suggestion"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                         <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </button>
                     <button
                       className="suggestion-btn reject-btn"
                       onClick={rejectSuggestion}
-                      title="Reject suggestion (Esc)"
+                      title="Reject suggestion"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                         <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </button>
@@ -302,10 +395,16 @@ function DocumentEditor() {
                 </div>
               </div>
             )}
-            {loadingSuggestion && (
-              <div className="suggestion-loading">
+            {loadingSuggestion && cursorPosition && (
+              <div
+                className="suggestion-loading"
+                style={{
+                  top: `${cursorPosition.top}px`,
+                  left: `${cursorPosition.left}px`
+                }}
+              >
                 <div className="spinner"></div>
-                <span>Getting AI suggestion...</span>
+                <span>Getting suggestion...</span>
               </div>
             )}
           </div>
