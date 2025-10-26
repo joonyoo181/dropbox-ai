@@ -225,3 +225,65 @@
     transform: rotate(360deg);
   }
 }
+
+/* Calendar task styles */
+.calendar-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.create-event-btn {
+  color: #ea4335;
+}
+
+.create-event-btn:hover {
+  background-color: #fce8e6;
+  color: #c5371d;
+}
+
+.download-ics-btn {
+  color: #5f6368;
+}
+
+.download-ics-btn:hover {
+  background-color: #f1f3f4;
+  color: #202124;
+}
+
+.google-calendar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  color: #4285f4;
+  transition: all 0.2s;
+}
+
+.google-calendar-btn:hover {
+  background-color: #e8f0fe;
+  color: #1a73e8;
+}
+
+.creating-spinner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.creating-spinner .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #ea4335;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}

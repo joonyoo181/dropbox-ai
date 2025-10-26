@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -336,6 +336,65 @@ app.post('/api/action-items/:index/draft-email', async (req, res) => {
     console.error('Error drafting email:', error);
     res.status(500).json({ error: 'Failed to draft email' });
   }
+});
+
+// Create calendar event from action item
+app.post('/api/action-items/:index/create-calendar-event', async (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
+  }
+
+  const actionItem = actionItems[index];
+  
+  if (!actionItem.isCalendarTask) {
+    return res.status(400).json({ error: 'This action item is not a calendar task' });
+  }
+
+  try {
+    // Get the source document for context
+    const sourceDoc = documents.find(d => d.id === actionItem.documentId);
+    const documentContext = sourceDoc ? sourceDoc.content : '';
+
+    // Create the calendar event
+    const calendarEvent = await createCalendarEventFromTask(actionItem, documentContext);
+
+    // Store the event in the action item (preserve all original fields)
+    actionItems[index] = {
+      ...actionItems[index],
+      calendarEvent
+    };
+
+    res.json({
+      success: true,
+      calendarEvent,
+      actionItem: actionItems[index]
+    });
+  } catch (error) {
+    console.error('Error creating calendar event:', error);
+    res.status(500).json({ error: 'Failed to create calendar event' });
+  }
+});
+
+// Download ICS file for calendar event
+app.get('/api/action-items/:index/download-ics', (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
+  }
+
+  const actionItem = actionItems[index];
+  
+  if (!actionItem.calendarEvent || !actionItem.calendarEvent.icsContent) {
+    return res.status(400).json({ error: 'No calendar event found for this action item' });
+  }
+
+  // Set headers for file download
+  const filename = `${actionItem.calendarEvent.title.replace(/[^a-z0-9]/gi, '_')}.ics`;
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  
+  res.send(actionItem.calendarEvent.icsContent);
 });
 
 app.listen(PORT, () => {
