@@ -315,7 +315,7 @@ function isEmailTask(description, details) {
 function isCalendarTask(description, details) {
   const text = `${description} ${details || ''}`.toLowerCase();
   const hasCalendarKeyword = 
-    text.includes('meeting') ||
+    text.includes('meet') ||
     text.includes('schedule') ||
     text.includes('call') ||
     text.includes('appointment') ||
