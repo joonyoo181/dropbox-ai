@@ -335,16 +335,21 @@ Look for:
 - Deadlines or reminders
 
 For each action item found, extract:
-1. The action description
-2. Any associated email addresses, names, or dates
+1. The complete action description (KEEP email addresses, names, and subjects in the description - do NOT remove them)
+2. Any additional context or notes (only use this for extra information that isn't part of the core task)
 3. Priority (if mentioned)
+
+IMPORTANT: Keep the description complete and intact. For example:
+- "Email john@example.com about project update" should stay as "Email john@example.com about project update"
+- Do NOT split the email address into the details field
+- Only put supplementary information in details
 
 Respond ONLY with a JSON object in this exact format:
 {
   "actionItems": [
     {
-      "description": "the action item description",
-      "details": "additional context or details (emails, dates, etc.)",
+      "description": "the complete action item description with all names, emails, and subjects",
+      "details": "only additional context if any, empty string if none",
       "priority": "high|medium|low|none"
     }
   ]

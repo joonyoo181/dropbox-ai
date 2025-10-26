@@ -299,12 +299,16 @@ app.post('/api/action-items/:index/draft-email', async (req, res) => {
     // Draft the email
     const emailDraft = await draftEmailFromTask(actionItem, documentContext);
 
-    // Store the draft in the action item
-    actionItems[index].emailDraft = emailDraft;
+    // Store the draft in the action item (preserve all original fields)
+    actionItems[index] = {
+      ...actionItems[index],
+      emailDraft
+    };
 
     res.json({
       success: true,
-      emailDraft
+      emailDraft,
+      actionItem: actionItems[index]
     });
   } catch (error) {
     console.error('Error drafting email:', error);
