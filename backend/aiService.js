@@ -304,7 +304,7 @@ Respond ONLY with a JSON object in this exact format:
  */
 function isEmailTask(description, details) {
   const text = `${description} ${details || ''}`.toLowerCase();
-  const hasEmailKeyword = text.includes('email') || text.includes('e-mail');
+  const hasEmailKeyword = text.includes('mail');
   const hasEmailAddress = /\S+@\S+\.\S+/.test(text);
   return hasEmailKeyword || hasEmailAddress;
 }
