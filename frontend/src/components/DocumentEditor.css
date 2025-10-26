@@ -135,6 +135,8 @@
   position: relative;
   z-index: 50;
   flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .toolbar-buttons {
