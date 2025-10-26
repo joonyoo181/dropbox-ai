@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL } from '../config';
 import Sidebar, { HamburgerButton } from './Sidebar';
 import ActionItemsPage from './ActionItemsPage';
 import './DocumentList.css';
@@ -28,7 +29,7 @@ function DocumentList() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await axios.get('/api/documents');
+      const response = await axios.get(`${API_URL}/api/documents`);
       setDocuments(response.data);
       setAllDocuments(response.data);
       setLoading(false);
@@ -40,7 +41,7 @@ function DocumentList() {
 
   const createNewDocument = async () => {
     try {
-      const response = await axios.post('/api/documents', {
+      const response = await axios.post(`${API_URL}/api/documents`, {
         title: 'Untitled Document',
         content: ''
       });
@@ -61,7 +62,7 @@ function DocumentList() {
 
     setSearching(true);
     try {
-      const response = await axios.post('/api/search', { query });
+      const response = await axios.post(`${API_URL}/api/search`, { query });
       setDocuments(response.data.documents);
       setSearchInterpretation(response.data.interpretation);
     } catch (error) {

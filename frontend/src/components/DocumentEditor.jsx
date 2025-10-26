@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL } from '../config';
 import ReactQuill, { Quill } from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import './DocumentEditor.css';
@@ -215,7 +216,7 @@ function DocumentEditor() {
   }, [activeHighlightId, tabs, customTabs, getTabColor]);
   const extractActionItemsOnExit = async () => {
     try {
-      await axios.post(`/api/documents/${id}/extract-actions`);
+      await axios.post(`${API_URL}/api/documents/${id}/extract-actions`);
       console.log('Action items extracted on exit');
     } catch (error) {
       console.error('Error extracting action items:', error);
@@ -224,7 +225,7 @@ function DocumentEditor() {
 
   const fetchDocument = async () => {
     try {
-      const response = await axios.get(`/api/documents/${id}`);
+      const response = await axios.get(`${API_URL}/api/documents/${id}`);
       console.log('Fetched document:', response.data);
       setDocData(response.data);
       setTitle(response.data.title);
@@ -250,7 +251,7 @@ function DocumentEditor() {
   const saveDocument = async (newTitle, newContent, newTabs = tabs, newCustomTabs = customTabs) => {
     setSaving(true);
     try {
-      await axios.put(`/api/documents/${id}`, {
+      await axios.put(`${API_URL}/api/documents/${id}`, {
         title: newTitle,
         content: newContent,
         tabs: newTabs,
@@ -475,7 +476,7 @@ function DocumentEditor() {
         try {
           if (tabName === 'edits') {
             // Call the edit API for edit commands
-            const response = await axios.post('/api/ai/process-edit', {
+            const response = await axios.post(`${API_URL}/api/ai/process-edit`, {
               originalText: selectedText,
               editInstruction: customPrompt || 'improve this text'
             });
@@ -486,7 +487,7 @@ function DocumentEditor() {
             setAiResponse(explanation);
           } else {
             // Call the regular AI API for other commands
-            const response = await axios.post('/api/ai/process-command', {
+            const response = await axios.post(`${API_URL}/api/ai/process-command`, {
               highlightedText: selectedText,
               tabType: tabName,
               customPrompt: customPrompt || ''

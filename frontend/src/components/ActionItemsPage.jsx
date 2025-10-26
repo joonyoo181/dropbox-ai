@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_URL } from '../config';
 import ActionItems from './ActionItems';
 import './ActionItemsPage.css';
 
@@ -13,7 +14,7 @@ function ActionItemsPage({ hamburgerButton }) {
 
   const fetchActionItems = async () => {
     try {
-      const response = await axios.get('/api/action-items');
+      const response = await axios.get(`${API_URL}/api/action-items`);
       setActionItems(response.data);
       setLoading(false);
     } catch (error) {

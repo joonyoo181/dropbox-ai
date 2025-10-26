@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { API_URL } from '../config';
 import './ActionItems.css';
 
 function ActionItems({ actionItems, onUpdate }) {
@@ -27,7 +28,7 @@ function ActionItems({ actionItems, onUpdate }) {
     setDraftingEmail(prev => ({ ...prev, [index]: true }));
     
     try {
-      const response = await axios.post(`/api/action-items/${index}/draft-email`);
+      const response = await axios.post(`${API_URL}/api/action-items/${index}/draft-email`);
       
       if (response.data.success) {
         onUpdate();
@@ -44,7 +45,7 @@ function ActionItems({ actionItems, onUpdate }) {
     setCreatingEvent(prev => ({ ...prev, [index]: true }));
     
     try {
-      const response = await axios.post(`/api/action-items/${index}/create-calendar-event`);
+      const response = await axios.post(`${API_URL}/api/action-items/${index}/create-calendar-event`);
       
       if (response.data.success) {
         onUpdate();
@@ -65,7 +66,7 @@ function ActionItems({ actionItems, onUpdate }) {
     setGeneratingEdit(prev => ({ ...prev, [index]: true }));
     
     try {
-      const response = await axios.post(`/api/action-items/${index}/generate-word-edit`);
+      const response = await axios.post(`${API_URL}/api/action-items/${index}/generate-word-edit`);
       
       if (response.data.success) {
         onUpdate();
@@ -85,7 +86,7 @@ function ActionItems({ actionItems, onUpdate }) {
 
     try {
       // Get the document
-      const docResponse = await axios.get(`/api/documents/${item.documentId}`);
+      const docResponse = await axios.get(`${API_URL}/api/documents/${item.documentId}`);
       const document = docResponse.data;
 
       // Helper to decode HTML entities
@@ -245,13 +246,13 @@ function ActionItems({ actionItems, onUpdate }) {
       const updatedContent = doc.body.innerHTML;
       
       // Update the document
-      await axios.put(`/api/documents/${item.documentId}`, {
+      await axios.put(`${API_URL}/api/documents/${item.documentId}`, {
         title: document.title,
         content: updatedContent
       });
       
       // Delete the action item
-      await axios.delete(`/api/action-items/${item.originalIndex}`);
+      await axios.delete(`${API_URL}/api/action-items/${item.originalIndex}`);
       
       alert('Edit applied successfully!');
       
@@ -265,7 +266,7 @@ function ActionItems({ actionItems, onUpdate }) {
 
   const handleComplete = async (index) => {
     try {
-      await axios.patch(`/api/action-items/${index}/complete`);
+      await axios.patch(`${API_URL}/api/action-items/${index}/complete`);
       onUpdate();
     } catch (error) {
       console.error('Error completing action item:', error);
@@ -274,7 +275,7 @@ function ActionItems({ actionItems, onUpdate }) {
 
   const handleDelete = async (index) => {
     try {
-      await axios.delete(`/api/action-items/${index}`);
+      await axios.delete(`${API_URL}/api/action-items/${index}`);
       onUpdate();
     } catch (error) {
       console.error('Error deleting action item:', error);
