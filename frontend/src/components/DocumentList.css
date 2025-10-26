@@ -1,3 +1,13 @@
+.app-container {
+  min-height: 100vh;
+  background-color: #f8f9fa;
+  display: flex;
+}
+
+.main-content {
+  flex: 1;
+}
+
 .document-list-container {
   min-height: 100vh;
   background-color: #f8f9fa;
@@ -13,10 +23,16 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
 .header h1 {
   font-size: 24px;
   font-weight: 500;
   color: #202124;
+  margin: 0;
 }
 
 .new-doc-btn {
@@ -173,15 +189,20 @@
 .delete-btn {
   background: none;
   border: none;
-  color: #5f6368;
+  color: #ea4335;
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
+  opacity: 0.5;
   transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.delete-btn svg {
+  display: block;
 }
 
 .document-card:hover .delete-btn {
@@ -189,8 +210,8 @@
 }
 
 .delete-btn:hover {
-  background-color: #f1f3f4;
-  color: #d93025;
+  background-color: #fce8e6;
+  color: #c5371d;
 }
 
 .empty-state {

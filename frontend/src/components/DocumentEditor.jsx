@@ -21,7 +21,23 @@ function DocumentEditor() {
 
   useEffect(() => {
     fetchDocument();
+
+    // Extract action items when component unmounts (user exits)
+    return () => {
+      if (id) {
+        extractActionItemsOnExit();
+      }
+    };
   }, [id]);
+
+  const extractActionItemsOnExit = async () => {
+    try {
+      await axios.post(`/api/documents/${id}/extract-actions`);
+      console.log('Action items extracted on exit');
+    } catch (error) {
+      console.error('Error extracting action items:', error);
+    }
+  };
 
   const fetchDocument = async () => {
     try {

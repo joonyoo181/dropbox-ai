@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -52,6 +52,9 @@ let documents = [
     }
   }
 ];
+
+// In-memory storage for action items
+let actionItems = [];
 
 // Get all documents
 app.get('/api/documents', (req, res) => {
@@ -199,6 +202,80 @@ app.post('/api/suggest', async (req, res) => {
     console.error('Error generating suggestion:', error);
     res.status(500).json({ error: 'Failed to generate suggestion' });
   }
+});
+
+// Extract action items from a document
+app.post('/api/documents/:id/extract-actions', async (req, res) => {
+  const doc = documents.find(d => d.id === req.params.id);
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+
+  try {
+    const newActionItems = await extractActionItems(doc.id, doc.title, doc.content);
+
+    // Remove duplicates using AI-based similarity detection
+    const uniqueNewItems = [];
+    for (const newItem of newActionItems) {
+      let isDuplicate = false;
+
+      // Check similarity against existing action items from the same document
+      for (const existingItem of actionItems) {
+        if (existingItem.documentId === newItem.documentId) {
+          const isSimilar = await areTasksSimilar(newItem, existingItem);
+          if (isSimilar) {
+            isDuplicate = true;
+            console.log(`Detected duplicate: "${newItem.description}" similar to "${existingItem.description}"`);
+            break;
+          }
+        }
+      }
+
+      if (!isDuplicate) {
+        uniqueNewItems.push(newItem);
+      }
+    }
+
+    // Add unique items to the action items list
+    actionItems.push(...uniqueNewItems);
+
+    res.json({
+      extractedCount: newActionItems.length,
+      addedCount: uniqueNewItems.length,
+      actionItems: uniqueNewItems
+    });
+  } catch (error) {
+    console.error('Error extracting action items:', error);
+    res.status(500).json({ error: 'Failed to extract action items' });
+  }
+});
+
+// Get all action items
+app.get('/api/action-items', (_req, res) => {
+  res.json(actionItems);
+});
+
+// Delete an action item
+app.delete('/api/action-items/:index', (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
+  }
+
+  actionItems.splice(index, 1);
+  res.status(204).send();
+});
+
+// Mark action item as complete
+app.patch('/api/action-items/:index/complete', (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
+  }
+
+  actionItems[index].completed = true;
+  actionItems[index].completedAt = new Date().toISOString();
+  res.json(actionItems[index]);
 });
 
 app.listen(PORT, () => {

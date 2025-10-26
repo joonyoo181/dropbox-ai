@@ -300,6 +300,132 @@ Respond ONLY with a JSON object in this exact format:
 }
 
 /**
+ * Extracts action items from document content
+ */
+export async function extractActionItems(documentId, title, content) {
+  if (!geminiModel && !openai) {
+    // Fallback to simple pattern matching
+    return fallbackExtractActionItems(content);
+  }
+
+  try {
+    const textContent = stripHtml(content);
+    const prompt = `You are an action item detector. Analyze the following document and extract any action items, tasks, or TODOs mentioned.
+
+Document Title: "${title}"
+Content: "${textContent}"
+
+Look for:
+- TODO items
+- Action items
+- Tasks to complete
+- Things that need to be done
+- Emails to send
+- Calls to make
+- Deadlines or reminders
+
+For each action item found, extract:
+1. The action description
+2. Any associated email addresses, names, or dates
+3. Priority (if mentioned)
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "actionItems": [
+    {
+      "description": "the action item description",
+      "details": "additional context or details (emails, dates, etc.)",
+      "priority": "high|medium|low|none"
+    }
+  ]
+}
+
+If no action items are found, return an empty array.`;
+
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+
+    // Add document ID to each action item
+    return result.actionItems.map(item => ({
+      ...item,
+      documentId,
+      documentTitle: title,
+      createdAt: new Date().toISOString()
+    }));
+  } catch (error) {
+    console.error('Error extracting action items:', error);
+    return fallbackExtractActionItems(content);
+  }
+}
+
+/**
+ * Checks if two action items are semantically similar/duplicates
+ * Returns true if tasks are essentially the same despite different wording
+ */
+export async function areTasksSimilar(task1, task2) {
+  if (!geminiModel && !openai) {
+    // Fallback to exact string matching
+    return task1.description.toLowerCase().trim() === task2.description.toLowerCase().trim();
+  }
+
+  try {
+    const prompt = `You are a task similarity detector. Determine if these two tasks are essentially the same action item, even if worded differently.
+
+Task 1: "${task1.description}"
+Details 1: "${task1.details || 'none'}"
+
+Task 2: "${task2.description}"
+Details 2: "${task2.details || 'none'}"
+
+Consider tasks as duplicates if:
+- They describe the same action with the same recipient/subject
+- Minor wording differences like "send email" vs "send an email"
+- Same core action even with slight variations
+
+Do NOT consider as duplicates if:
+- The recipient or subject is different
+- The action is different
+- The context or purpose is different
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "areSimilar": true or false,
+  "reasoning": "brief explanation why they are or aren't similar"
+}`;
+
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+    return result.areSimilar;
+  } catch (error) {
+    console.error('Error checking task similarity:', error);
+    // Fallback to exact string matching on error
+    return task1.description.toLowerCase().trim() === task2.description.toLowerCase().trim();
+  }
+}
+
+/**
+ * Fallback action item extraction using pattern matching
+ */
+function fallbackExtractActionItems(content) {
+  const textContent = stripHtml(content);
+  const actionItems = [];
+
+  // Simple pattern matching for TODO items
+  const todoPattern = /(?:TODO|Action|Task|FIXME|NOTE):\s*([^\n.!?]+)/gi;
+  const matches = textContent.matchAll(todoPattern);
+
+  for (const match of matches) {
+    actionItems.push({
+      description: match[1].trim(),
+      details: '',
+      priority: 'none'
+    });
+  }
+
+  return actionItems;
+}
+
+/**
  * Strips HTML tags from content
  */
 function stripHtml(html) {
