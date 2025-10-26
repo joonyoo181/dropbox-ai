@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand, processEditCommand } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand, generateWordEdit, processEditCommand } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -395,6 +395,44 @@ app.get('/api/action-items/:index/download-ics', (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
   res.send(actionItem.calendarEvent.icsContent);
+});
+
+// Generate word edit from action item
+app.post('/api/action-items/:index/generate-word-edit', async (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
+  }
+
+  const actionItem = actionItems[index];
+  
+  if (!actionItem.isWordEditTask) {
+    return res.status(400).json({ error: 'This action item is not a word edit task' });
+  }
+
+  try {
+    // Get the source document for context
+    const sourceDoc = documents.find(d => d.id === actionItem.documentId);
+    const documentContext = sourceDoc ? sourceDoc.content : '';
+
+    // Generate the word edit
+    const wordEdit = await generateWordEdit(actionItem, documentContext);
+
+    // Store the edit in the action item (preserve all original fields)
+    actionItems[index] = {
+      ...actionItems[index],
+      wordEdit
+    };
+
+    res.json({
+      success: true,
+      wordEdit,
+      actionItem: actionItems[index]
+    });
+  } catch (error) {
+    console.error('Error generating word edit:', error);
+    res.status(500).json({ error: 'Failed to generate word edit' });
+  }
 });
 
 // Process AI command for highlighted text

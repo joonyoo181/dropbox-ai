@@ -6,9 +6,18 @@ function ActionItems({ actionItems, onUpdate }) {
   const [expandedItems, setExpandedItems] = useState({});
   const [draftingEmail, setDraftingEmail] = useState({});
   const [creatingEvent, setCreatingEvent] = useState({});
+  const [generatingEdit, setGeneratingEdit] = useState({});
+  const [expandedEdits, setExpandedEdits] = useState({});
 
   const toggleExpand = (index) => {
     setExpandedItems(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+
+  const toggleEditExpand = (index) => {
+    setExpandedEdits(prev => ({
       ...prev,
       [index]: !prev[index]
     }));
@@ -50,6 +59,153 @@ function ActionItems({ actionItems, onUpdate }) {
 
   const handleDownloadICS = (index) => {
     window.open(`/api/action-items/${index}/download-ics`, '_blank');
+  };
+
+  const handleGenerateWordEdit = async (index) => {
+    setGeneratingEdit(prev => ({ ...prev, [index]: true }));
+    
+    try {
+      const response = await axios.post(`/api/action-items/${index}/generate-word-edit`);
+      
+      if (response.data.success) {
+        onUpdate();
+        // Auto-expand the edit after generation
+        setExpandedEdits(prev => ({ ...prev, [index]: true }));
+      }
+    } catch (error) {
+      console.error('Error generating word edit:', error);
+      alert('Failed to generate word edit. Please try again.');
+    } finally {
+      setGeneratingEdit(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
+  const handleAcceptEdit = async (item) => {
+    if (!item.wordEdit) return;
+    
+    try {
+      // Get the document
+      const docResponse = await axios.get(`/api/documents/${item.documentId}`);
+      const document = docResponse.data;
+      
+      // Normalize whitespace function
+      const normalizeText = (text) => {
+        return text.replace(/\s+/g, ' ').trim();
+      };
+      
+      const normalizedTarget = normalizeText(item.wordEdit.targetText);
+      const normalizedSuggestion = normalizeText(item.wordEdit.suggestedEdit);
+      
+      console.log('Target (normalized):', normalizedTarget);
+      console.log('Suggestion (normalized):', normalizedSuggestion);
+      
+      // Parse HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(document.content, 'text/html');
+      
+      let replaced = false;
+      
+      // Walk through all text nodes
+      const walker = window.document.createTreeWalker(
+        doc.body,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+      
+      let node;
+      const nodesToReplace = [];
+      
+      // First pass: collect all nodes that need replacement
+      while ((node = walker.nextNode())) {
+        const normalizedNodeText = normalizeText(node.textContent);
+        if (normalizedNodeText.includes(normalizedTarget)) {
+          nodesToReplace.push({
+            node: node,
+            originalText: node.textContent
+          });
+        }
+      }
+      
+      // Second pass: do the replacements
+      nodesToReplace.forEach(({ node, originalText }) => {
+        // Try to preserve original spacing/formatting as much as possible
+        const normalizedNodeText = normalizeText(originalText);
+        
+        // Simple replacement: replace normalized version
+        if (normalizedNodeText === normalizedTarget) {
+          // Whole node is the target, replace entirely
+          node.textContent = normalizedSuggestion;
+          replaced = true;
+          console.log('Replaced entire node');
+        } else if (normalizedNodeText.includes(normalizedTarget)) {
+          // Target is part of the node
+          // Try to replace while preserving some formatting
+          const newText = originalText.replace(
+            new RegExp(normalizedTarget.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+            normalizedSuggestion
+          );
+          node.textContent = newText;
+          replaced = true;
+          console.log('Replaced within node');
+        }
+      });
+      
+      if (!replaced) {
+        console.error('No replacement made');
+        alert('Could not find the text to replace. Please try editing manually.');
+        return;
+      }
+      
+      // Now remove the TODO line from the document
+      const todoWalker = window.document.createTreeWalker(
+        doc.body,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+      
+      let todoNode;
+      const todosToRemove = [];
+      
+      // Find nodes containing the TODO
+      while ((todoNode = todoWalker.nextNode())) {
+        const nodeText = todoNode.textContent.trim();
+        // Check if this node contains the TODO for this specific task
+        if (nodeText.includes('TODO') && nodeText.includes(item.description.substring(0, 30))) {
+          todosToRemove.push(todoNode);
+        }
+      }
+      
+      // Remove TODO nodes and their parent elements if they become empty
+      todosToRemove.forEach((node) => {
+        const parent = node.parentElement;
+        if (parent) {
+          // Remove the entire parent element (likely a <p> tag)
+          parent.remove();
+          console.log('Removed TODO line');
+        }
+      });
+      
+      const updatedContent = doc.body.innerHTML;
+      
+      // Update the document
+      await axios.put(`/api/documents/${item.documentId}`, {
+        title: document.title,
+        content: updatedContent
+      });
+      
+      // Delete the action item
+      await axios.delete(`/api/action-items/${item.originalIndex}`);
+      
+      alert('Edit applied successfully!');
+      
+      // Refresh action items
+      onUpdate();
+    } catch (error) {
+      console.error('Error applying edit:', error);
+      alert('Failed to apply edit: ' + error.message);
+    }
   };
 
   const handleComplete = async (index) => {
@@ -129,6 +285,11 @@ function ActionItems({ actionItems, onUpdate }) {
                         {item.isCalendarTask && (
                           <span className="calendar-badge" title="Calendar task">
                             📅
+                          </span>
+                        )}
+                        {item.isWordEditTask && (
+                          <span className="word-edit-badge" title="Word edit task">
+                            ✍️
                           </span>
                         )}
                       </p>
@@ -225,6 +386,40 @@ function ActionItems({ actionItems, onUpdate }) {
                           </a>
                         </>
                       )}
+                      {item.isWordEditTask && !item.wordEdit && !generatingEdit[item.originalIndex] && (
+                        <button
+                          className="action-item-btn generate-edit-btn"
+                          onClick={() => handleGenerateWordEdit(item.originalIndex)}
+                          title="Generate edit"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      )}
+                      {generatingEdit[item.originalIndex] && (
+                        <div className="generating-spinner">
+                          <div className="spinner"></div>
+                        </div>
+                      )}
+                      {item.wordEdit && (
+                        <button
+                          className="action-item-btn view-edit-btn"
+                          onClick={() => toggleEditExpand(item.originalIndex)}
+                          title={expandedEdits[item.originalIndex] ? 'Hide edit' : 'View edit'}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d={expandedEdits[item.originalIndex] ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"}
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      )}
                       {!item.completed && (
                         <button
                           className="action-item-btn complete-btn"
@@ -250,6 +445,45 @@ function ActionItems({ actionItems, onUpdate }) {
                   {expandedItems[item.originalIndex] && item.details && (
                     <div className="action-item-details">
                       <p>{item.details}</p>
+                    </div>
+                  )}
+                  {expandedEdits[item.originalIndex] && item.wordEdit && (
+                    <div className="word-edit-dropdown">
+                      <div className="edit-location">
+                        <strong>Location:</strong> {item.wordEdit.location}
+                      </div>
+                      
+                      <div className="edit-comparison">
+                        <div className="edit-column">
+                          <div className="edit-label-header">Original Text</div>
+                          <div className="edit-box original-text">
+                            {item.wordEdit.targetText}
+                          </div>
+                        </div>
+                        
+                        <div className="edit-column">
+                          <div className="edit-label-header">Suggested Edit</div>
+                          <div className="edit-box suggested-text">
+                            {item.wordEdit.suggestedEdit}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="edit-explanation-section">
+                        <strong>Explanation:</strong> {item.wordEdit.explanation}
+                      </div>
+
+                      <div className="edit-actions">
+                        <button 
+                          className="edit-action-btn accept-btn"
+                          onClick={() => handleAcceptEdit(item)}
+                          title="Accept & apply this edit to the document"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

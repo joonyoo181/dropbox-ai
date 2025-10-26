@@ -226,6 +226,160 @@
   }
 }
 
+/* Word Edit task styles */
+.word-edit-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.generate-edit-btn {
+  color: #9334e6;
+}
+
+.generate-edit-btn:hover {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+}
+
+.view-edit-btn {
+  color: #9334e6;
+}
+
+.view-edit-btn:hover {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+}
+
+.generating-spinner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.generating-spinner .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #9334e6;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* Word Edit Dropdown styles */
+.word-edit-dropdown {
+  margin-top: 12px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  border-left: 4px solid #9334e6;
+}
+
+.edit-location {
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #9334e6;
+}
+
+.edit-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.edit-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-label-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5f6368;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.edit-box {
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 80px;
+}
+
+.original-text {
+  background-color: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #991b1b;
+}
+
+.suggested-text {
+  background-color: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #166534;
+}
+
+.edit-explanation-section {
+  margin-bottom: 12px;
+  padding: 12px;
+  background-color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #5f6368;
+  line-height: 1.5;
+}
+
+.edit-explanation-section strong {
+  color: #202124;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.edit-action-btn {
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.edit-action-btn.accept-btn {
+  background-color: #34a853;
+  color: white;
+}
+
+.edit-action-btn.accept-btn:hover {
+  background-color: #137333;
+  transform: scale(1.05);
+}
+
+.edit-action-btn.accept-btn svg {
+  flex-shrink: 0;
+}
+
+/* Responsive: Stack comparison on mobile */
+@media (max-width: 768px) {
+  .edit-comparison {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Calendar task styles */
 .calendar-badge {
   display: inline-flex;

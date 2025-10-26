@@ -336,6 +336,30 @@ function isCalendarTask(description, details) {
 }
 
 /**
+ * Detects if an action item is word/text editing related
+ */
+function isWordEditTask(description, details) {
+  const text = `${description} ${details || ''}`.toLowerCase();
+  
+  const editKeywords = [
+    'edit', 'rewrite', 'revise', 'improve', 'fix', 'update',
+    'rephrase', 'clarify', 'enhance', 'polish', 'proofread',
+    'change', 'modify', 'adjust', 'refine'
+  ];
+  
+  const contentKeywords = [
+    'paragraph', 'section', 'sentence', 'text', 'content',
+    'introduction', 'conclusion', 'summary', 'chapter',
+    'wording', 'grammar', 'tone', 'intro', 'body'
+  ];
+  
+  const hasEditKeyword = editKeywords.some(k => text.includes(k));
+  const hasContentKeyword = contentKeywords.some(k => text.includes(k));
+  
+  return hasEditKeyword && hasContentKeyword;
+}
+
+/**
  * Extracts action items from document content
  */
 export async function extractActionItems(documentId, title, content) {
@@ -395,7 +419,9 @@ If no action items are found, return an empty array.`;
       isEmailTask: isEmailTask(item.description, item.details),
       emailDraft: null,
       isCalendarTask: isCalendarTask(item.description, item.details),
-      calendarEvent: null
+      calendarEvent: null,
+      isWordEditTask: isWordEditTask(item.description, item.details),
+      wordEdit: null
     }));
   } catch (error) {
     console.error('Error extracting action items:', error);
@@ -775,6 +801,80 @@ END:VCALENDAR`;
 }
 
 /**
+ * Generates a word/text edit from an action item task
+ */
+export async function generateWordEdit(task, documentContext) {
+  if (!geminiModel && !openai) {
+    return fallbackWordEdit(task, documentContext);
+  }
+
+  try {
+    const textContent = stripHtml(documentContext);
+    
+    const prompt = `You are a professional editor. Analyze this editing task and the document content.
+
+Task: "${task.description}"
+Additional details: "${task.details || 'none'}"
+Document title: "${task.documentTitle || 'Untitled'}"
+
+Full document content:
+"${textContent.substring(0, 3000)}"
+
+Your job:
+1. Identify the specific text section that needs editing based on the task description
+2. Provide an improved version of that text
+3. Explain what you changed and why
+
+IMPORTANT:
+- Find the most relevant text section (max 500 characters)
+- If the task mentions "introduction", "conclusion", "paragraph 2", etc., find that specific section
+- Improve grammar, clarity, tone, and engagement
+- Keep the same general meaning unless asked to change it
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "targetText": "the original text section you identified",
+  "suggestedEdit": "your improved version of the text",
+  "explanation": "brief explanation of what you changed and why",
+  "location": "where in document (e.g., 'introduction', 'second paragraph', 'conclusion')"
+}`;
+
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+    
+    return {
+      targetText: result.targetText,
+      suggestedEdit: result.suggestedEdit,
+      explanation: result.explanation,
+      location: result.location,
+      createdAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error generating word edit:', error);
+    return fallbackWordEdit(task, documentContext);
+  }
+}
+
+/**
+ * Fallback word edit when AI is not available
+ */
+function fallbackWordEdit(task, documentContext) {
+  const textContent = stripHtml(documentContext);
+  
+  // Try to find a section to edit (first paragraph as fallback)
+  const paragraphs = textContent.split('\n').filter(p => p.trim().length > 0);
+  const targetText = paragraphs[0] ? paragraphs[0].substring(0, 500) : 'No text found to edit';
+  
+  return {
+    targetText,
+    suggestedEdit: targetText,
+    explanation: 'AI editing not available. Please manually edit the text.',
+    location: 'first paragraph',
+    createdAt: new Date().toISOString()
+  };
+}
+
+/**
  * Fallback action item extraction using pattern matching
  */
 function fallbackExtractActionItems(documentId, title, content) {
@@ -797,7 +897,9 @@ function fallbackExtractActionItems(documentId, title, content) {
       isEmailTask: isEmailTask(description, ''),
       emailDraft: null,
       isCalendarTask: isCalendarTask(description, ''),
-      calendarEvent: null
+      calendarEvent: null,
+      isWordEditTask: isWordEditTask(description, ''),
+      wordEdit: null
     });
   }
 
