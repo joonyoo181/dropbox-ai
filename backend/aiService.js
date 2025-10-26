@@ -43,15 +43,23 @@ if (AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY) {
 
 /**
  * Helper function to call AI API (supports both OpenAI and Gemini)
+ * @param {string} prompt - The prompt to send to the AI
+ * @param {boolean} jsonMode - Whether to request JSON format (default: true)
  */
-async function callAI(prompt) {
+async function callAI(prompt, jsonMode = true) {
   if (AI_PROVIDER === 'openai' && openai) {
-    const response = await openai.chat.completions.create({
+    const config = {
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
-    });
+      temperature: 0.3
+    };
+
+    // Only add JSON format if requested and prompt mentions JSON
+    if (jsonMode) {
+      config.response_format = { type: 'json_object' };
+    }
+
+    const response = await openai.chat.completions.create(config);
     return response.choices[0].message.content;
   } else if (AI_PROVIDER === 'gemini' && geminiModel) {
     const result = await geminiModel.generateContent(prompt);
@@ -794,6 +802,55 @@ function fallbackExtractActionItems(documentId, title, content) {
   }
 
   return actionItems;
+}
+
+/**
+ * Processes AI commands for highlighted text
+ * @param {string} highlightedText - The text highlighted by the user
+ * @param {string} tabType - The type of tab (summary, definitions, questions, etc.)
+ * @param {string} customPrompt - Optional custom prompt from the user
+ * @returns {Promise<string>} The AI-generated response
+ */
+export async function processAICommand(highlightedText, tabType, customPrompt = '') {
+  if (!geminiModel && !openai) {
+    return `AI not available. Please configure an AI provider.`;
+  }
+
+  try {
+    let systemPrompt = '';
+
+    // Define system prompts based on tab type
+    if (customPrompt) {
+      // User provided a custom prompt - use it
+      systemPrompt = customPrompt;
+    } else {
+      // Use default prompts based on tab type
+      switch (tabType) {
+        case 'summary':
+          systemPrompt = 'Provide a concise summary of the following text:';
+          break;
+        case 'definitions':
+          systemPrompt = 'Define or explain the following text/term:';
+          break;
+        case 'questions':
+          systemPrompt = 'Answer the following question or provide insights about:';
+          break;
+        default:
+          systemPrompt = 'Analyze and provide insights about the following text:';
+      }
+    }
+
+    const prompt = `${systemPrompt}\n\n"${highlightedText}"\n\nProvide a clear, concise response (2-3 sentences maximum unless more detail is specifically requested).`;
+
+    // Call AI with the prompt in plain text mode (not JSON)
+    const responseText = await callAI(prompt, false);
+
+    // Return the response directly
+    return responseText.trim();
+  } catch (error) {
+    console.error('Error processing AI command:', error);
+    return `Error processing AI request: ${error.message}`;
+  }
 }
 
 /**

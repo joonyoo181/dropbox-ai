@@ -397,25 +397,21 @@ function DocumentEditor() {
       if (useAI) {
         isAIGenerated = true;
 
-        // For now, generate mock AI response
-        if (customPrompt) {
-          resultText = `AI RESPONSE TO "${customPrompt}"`;
-        } else {
-          // Default prompts for built-in tabs
-          if (tabName === 'summary') {
-            resultText = `AI RESPONSE TO "summarize this"`;
-          } else if (tabName === 'definitions') {
-            resultText = `AI RESPONSE TO "define this"`;
-          } else if (tabName === 'questions') {
-            resultText = `AI RESPONSE TO "answer this question"`;
-          } else if (tabName === 'edits') {
-            resultText = `AI RESPONSE TO "edit this"`;
-          } else {
-            resultText = `AI RESPONSE TO "process this"`;
-          }
-        }
+        try {
+          // Call the AI API to process the command
+          const response = await axios.post('/api/ai/process-command', {
+            highlightedText: selectedText,
+            tabType: tabName,
+            customPrompt: customPrompt || ''
+          });
 
-        setAiResponse(resultText);
+          resultText = response.data.response;
+          setAiResponse(resultText);
+        } catch (error) {
+          console.error('Error calling AI API:', error);
+          resultText = 'Error: Failed to process AI command. Please try again.';
+          setAiResponse(resultText);
+        }
       }
 
       // Add to tab
@@ -1263,7 +1259,7 @@ function DocumentEditor() {
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
                 <path d="M12 16v-4M12 8h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
-              <span className="toolbar-hint">Select text, then type: s/ai, d/ai, q/ai, edit/ai, save</span>
+              <span className="toolbar-hint">Select text, then type: s/ai, d/ai, q/ai</span>
             </div>
           </div>
 
@@ -1601,8 +1597,6 @@ function DocumentEditor() {
               <div className="hint"><kbd>s/ai</kbd> Summary</div>
               <div className="hint"><kbd>d/ai</kbd> Definition</div>
               <div className="hint"><kbd>q/ai</kbd> Answer</div>
-              <div className="hint"><kbd>edit/ai [instruction]</kbd> Edit</div>
-              <div className="hint"><kbd>save</kbd> Save version</div>
               <div className="hint"><kbd>Esc</kbd> Cancel</div>
             </div>
           </div>

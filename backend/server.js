@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -384,7 +384,7 @@ app.get('/api/action-items/:index/download-ics', (req, res) => {
   }
 
   const actionItem = actionItems[index];
-  
+
   if (!actionItem.calendarEvent || !actionItem.calendarEvent.icsContent) {
     return res.status(400).json({ error: 'No calendar event found for this action item' });
   }
@@ -393,8 +393,25 @@ app.get('/api/action-items/:index/download-ics', (req, res) => {
   const filename = `${actionItem.calendarEvent.title.replace(/[^a-z0-9]/gi, '_')}.ics`;
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  
+
   res.send(actionItem.calendarEvent.icsContent);
+});
+
+// Process AI command for highlighted text
+app.post('/api/ai/process-command', async (req, res) => {
+  const { highlightedText, tabType, customPrompt } = req.body;
+
+  if (!highlightedText || !tabType) {
+    return res.status(400).json({ error: 'Missing required fields: highlightedText and tabType' });
+  }
+
+  try {
+    const aiResponse = await processAICommand(highlightedText, tabType, customPrompt || '');
+    res.json({ response: aiResponse });
+  } catch (error) {
+    console.error('Error processing AI command:', error);
+    res.status(500).json({ error: 'Failed to process AI command' });
+  }
 });
 
 app.listen(PORT, () => {
