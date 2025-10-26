@@ -166,3 +166,62 @@
   color: #5f6368;
   line-height: 1.5;
 }
+
+/* Email task styles */
+.email-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.draft-email-btn {
+  color: #1a73e8;
+}
+
+.draft-email-btn:hover {
+  background-color: #e8f0fe;
+  color: #1558d6;
+}
+
+.open-draft-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  color: #1a73e8;
+  transition: all 0.2s;
+}
+
+.open-draft-btn:hover {
+  background-color: #e8f0fe;
+  color: #1558d6;
+}
+
+.drafting-spinner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.drafting-spinner .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

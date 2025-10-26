@@ -257,12 +257,65 @@ function fallbackRanking(interpretation, documents) {
 }
 
 /**
+ * Generates AI-powered text improvement suggestions
+ */
+export async function suggestTextImprovement(text) {
+  if (!geminiModel && !openai) {
+    // Fallback to simple suggestion when AI is not available
+    return {
+      suggestion: text,
+      message: 'AI suggestions not available - API key not configured'
+    };
+  }
+
+  try {
+    const prompt = `You are a professional writing assistant. Analyze the following text and suggest improvements. You can:
+- Rephrase the entire sentence for better clarity
+- Fix grammar and spelling errors
+- Improve word choice and tone
+- Make it more concise
+- Enhance readability
+
+Only suggest changes if there are meaningful improvements to make. If the text is already good, you can make minor refinements or keep it largely the same.
+
+Original text:
+"${text}"
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "suggestion": "the improved version of the text",
+  "changes": "brief description of what you changed and why"
+}`;
+
+    const responseText = await callAI(prompt);
+    const parsedResult = JSON.parse(responseText);
+    return parsedResult;
+  } catch (error) {
+    console.error('Error generating text suggestion:', error);
+    return {
+      suggestion: text,
+      message: 'Error generating suggestion'
+    };
+  }
+}
+
+/**
+ * Detects if an action item is email-related
+ */
+function isEmailTask(description, details) {
+  const text = `${description} ${details || ''}`.toLowerCase();
+  const hasEmailKeyword = text.includes('email') || text.includes('e-mail');
+  const hasEmailAddress = /\S+@\S+\.\S+/.test(text);
+  return hasEmailKeyword || hasEmailAddress;
+}
+
+/**
  * Extracts action items from document content
  */
 export async function extractActionItems(documentId, title, content) {
   if (!geminiModel && !openai) {
     // Fallback to simple pattern matching
-    return fallbackExtractActionItems(content);
+    return fallbackExtractActionItems(documentId, title, content);
   }
 
   try {
@@ -282,16 +335,21 @@ Look for:
 - Deadlines or reminders
 
 For each action item found, extract:
-1. The action description
-2. Any associated email addresses, names, or dates
+1. The complete action description (KEEP email addresses, names, and subjects in the description - do NOT remove them)
+2. Any additional context or notes (only use this for extra information that isn't part of the core task)
 3. Priority (if mentioned)
+
+IMPORTANT: Keep the description complete and intact. For example:
+- "Email john@example.com about project update" should stay as "Email john@example.com about project update"
+- Do NOT split the email address into the details field
+- Only put supplementary information in details
 
 Respond ONLY with a JSON object in this exact format:
 {
   "actionItems": [
     {
-      "description": "the action item description",
-      "details": "additional context or details (emails, dates, etc.)",
+      "description": "the complete action item description with all names, emails, and subjects",
+      "details": "only additional context if any, empty string if none",
       "priority": "high|medium|low|none"
     }
   ]
@@ -302,16 +360,18 @@ If no action items are found, return an empty array.`;
     const text = await callAI(prompt);
     const result = JSON.parse(text);
 
-    // Add document ID to each action item
+    // Add document ID and email detection to each action item
     return result.actionItems.map(item => ({
       ...item,
       documentId,
       documentTitle: title,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      isEmailTask: isEmailTask(item.description, item.details),
+      emailDraft: null
     }));
   } catch (error) {
     console.error('Error extracting action items:', error);
-    return fallbackExtractActionItems(content);
+    return fallbackExtractActionItems(documentId, title, content);
   }
 }
 
@@ -361,9 +421,102 @@ Respond ONLY with a JSON object in this exact format:
 }
 
 /**
+ * Drafts an email from an action item task
+ */
+export async function draftEmailFromTask(task, documentContext) {
+  if (!geminiModel && !openai) {
+    // Fallback to simple template
+    return fallbackEmailDraft(task);
+  }
+
+  try {
+    const prompt = `You are an email writing assistant. Draft a professional email based on this action item.
+
+Action item: "${task.description}"
+Additional details: "${task.details || 'none'}"
+Document title: "${task.documentTitle || 'Untitled'}"
+Document context: "${documentContext ? documentContext.substring(0, 500) : 'none'}"
+
+Extract and provide:
+1. Recipient email address (if mentioned, otherwise leave as empty string)
+2. Appropriate subject line based on the context
+3. Professional email body with proper greeting and signature
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "recipient": "email@example.com or empty string if not found",
+  "subject": "Subject line",
+  "body": "Email body with proper greeting and closing\\n\\nBest regards"
+}`;
+
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+    
+    // Generate mailto link
+    const mailtoLink = createMailtoLink(result.recipient, result.subject, result.body);
+    
+    return {
+      to: result.recipient,
+      subject: result.subject,
+      body: result.body,
+      mailtoLink,
+      draftedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error drafting email:', error);
+    return fallbackEmailDraft(task);
+  }
+}
+
+/**
+ * Fallback email draft when AI is not available
+ */
+function fallbackEmailDraft(task) {
+  // Try to extract email from description
+  const emailMatch = task.description.match(/\S+@\S+\.\S+/);
+  const recipient = emailMatch ? emailMatch[0] : '';
+  
+  // Simple subject based on description
+  const subject = task.description.replace(/email|send|to/gi, '').trim().substring(0, 50);
+  
+  // Simple body template
+  const body = `Hi,\n\nRegarding: ${task.description}\n\n[Please add your message here]\n\nBest regards`;
+  
+  const mailtoLink = createMailtoLink(recipient, subject, body);
+  
+  return {
+    to: recipient,
+    subject: subject || 'Follow-up',
+    body,
+    mailtoLink,
+    draftedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Creates a mailto link from email components
+ */
+function createMailtoLink(to, subject, body) {
+  const params = [];
+  
+  if (subject) {
+    params.push(`subject=${encodeURIComponent(subject)}`);
+  }
+  
+  if (body) {
+    params.push(`body=${encodeURIComponent(body)}`);
+  }
+  
+  const recipientPart = to || '';
+  const paramString = params.join('&');
+  
+  return `mailto:${recipientPart}${paramString ? '?' + paramString : ''}`;
+}
+
+/**
  * Fallback action item extraction using pattern matching
  */
-function fallbackExtractActionItems(content) {
+function fallbackExtractActionItems(documentId, title, content) {
   const textContent = stripHtml(content);
   const actionItems = [];
 
@@ -372,10 +525,16 @@ function fallbackExtractActionItems(content) {
   const matches = textContent.matchAll(todoPattern);
 
   for (const match of matches) {
+    const description = match[1].trim();
     actionItems.push({
-      description: match[1].trim(),
+      description,
       details: '',
-      priority: 'none'
+      priority: 'none',
+      documentId,
+      documentTitle: title,
+      createdAt: new Date().toISOString(),
+      isEmailTask: isEmailTask(description, ''),
+      emailDraft: null
     });
   }
 

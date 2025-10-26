@@ -4,12 +4,31 @@ import './ActionItems.css';
 
 function ActionItems({ actionItems, onUpdate }) {
   const [expandedItems, setExpandedItems] = useState({});
+  const [draftingEmail, setDraftingEmail] = useState({});
 
   const toggleExpand = (index) => {
     setExpandedItems(prev => ({
       ...prev,
       [index]: !prev[index]
     }));
+  };
+
+  const handleDraftEmail = async (index) => {
+    setDraftingEmail(prev => ({ ...prev, [index]: true }));
+    
+    try {
+      const response = await axios.post(`/api/action-items/${index}/draft-email`);
+      
+      if (response.data.success) {
+        // Update the action items list
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('Error drafting email:', error);
+      alert('Failed to draft email. Please try again.');
+    } finally {
+      setDraftingEmail(prev => ({ ...prev, [index]: false }));
+    }
   };
 
   const handleComplete = async (index) => {
@@ -79,7 +98,14 @@ function ActionItems({ actionItems, onUpdate }) {
                         className="action-item-priority"
                         style={{ backgroundColor: getPriorityColor(item.priority) }}
                       ></span>
-                      <p className="action-item-description">{item.description}</p>
+                      <p className="action-item-description">
+                        {item.description}
+                        {item.isEmailTask && (
+                          <span className="email-badge" title="Email task">
+                            📧
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <div className="action-item-actions">
                       {item.details && (
@@ -98,6 +124,33 @@ function ActionItems({ actionItems, onUpdate }) {
                             />
                           </svg>
                         </button>
+                      )}
+                      {item.isEmailTask && !item.emailDraft && !draftingEmail[item.originalIndex] && (
+                        <button
+                          className="action-item-btn draft-email-btn"
+                          onClick={() => handleDraftEmail(item.originalIndex)}
+                          title="Draft email"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      )}
+                      {draftingEmail[item.originalIndex] && (
+                        <div className="drafting-spinner">
+                          <div className="spinner"></div>
+                        </div>
+                      )}
+                      {item.emailDraft && (
+                        <a
+                          href={item.emailDraft.mailtoLink}
+                          className="action-item-btn open-draft-btn"
+                          title="Open in email client"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </a>
                       )}
                       {!item.completed && (
                         <button
