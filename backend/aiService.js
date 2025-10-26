@@ -1,32 +1,65 @@
 // IMPORTANT: Load config first to ensure we use backend/.env
 import './config.js';
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
+// Get AI provider from environment (defaults to 'gemini')
+const AI_PROVIDER = process.env.AI_PROVIDER || 'gemini';
+
+let genAI = null;
+let geminiModel = null;
 let openai = null;
 
-// Initialize OpenAI only if API key is available and not a placeholder
-if (process.env.OPENAI_API_KEY) {
+// Initialize the selected AI provider
+if (AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY) {
+  try {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    geminiModel = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        responseMimeType: 'application/json',
+      }
+    });
+    console.log("AI Provider: Gemini (gemini-2.0-flash-exp)");
+  } catch (error) {
+    console.log("Gemini initialization error: ", error);
+    genAI = null;
+    geminiModel = null;
+  }
+} else if (AI_PROVIDER === 'openai' && process.env.OPENAI_API_KEY) {
   try {
     openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
-
-    // Test the API key
-    // TODO: uncomment this to check for valid key
-    //  await openai.chat.completions.create({
-    //     model: 'gpt-4o-mini',
-    //     messages: [{ role: 'user', content: 'JSON' }],
-    //     temperature: 0.3,
-    //     response_format: { type: 'json_object' }
-    //   });
-    
-    console.log("Key valid: ", process.env.OPENAI_API_KEY);
+    console.log("AI Provider: OpenAI (gpt-4o-mini)");
   } catch (error) {
-    console.log("Key invalid: ", error);
+    console.log("OpenAI initialization error: ", error);
     openai = null;
   }
+} else {
+  console.log(`AI Provider not configured. Set AI_PROVIDER to 'openai' or 'gemini' and provide the corresponding API key.`);
+}
 
+/**
+ * Helper function to call AI API (supports both OpenAI and Gemini)
+ */
+async function callAI(prompt) {
+  if (AI_PROVIDER === 'openai' && openai) {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      response_format: { type: 'json_object' }
+    });
+    return response.choices[0].message.content;
+  } else if (AI_PROVIDER === 'gemini' && geminiModel) {
+    const result = await geminiModel.generateContent(prompt);
+    const response = result.response;
+    return response.text();
+  } else {
+    throw new Error('No AI provider configured');
+  }
 }
 
 /**
@@ -34,7 +67,7 @@ if (process.env.OPENAI_API_KEY) {
  * Returns structured search criteria
  */
 export async function interpretSearchQuery(query, documents) {
-  if (!openai) {
+  if (!geminiModel && !openai) {
     // Fallback to simple text matching if no API key
     return fallbackSearch(query, documents);
   }
@@ -63,15 +96,10 @@ Respond ONLY with a JSON object in this exact format:
   "searchStrategy": "brief explanation of what to look for"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
-    });
-    console.log(response)
+    const text = await callAI(prompt);
+    console.log(text);
 
-    const interpretation = JSON.parse(response.choices[0].message.content);
+    const interpretation = JSON.parse(text);
     return interpretation;
   } catch (error) {
     console.error('Error interpreting search query:', error);
@@ -83,7 +111,7 @@ Respond ONLY with a JSON object in this exact format:
  * Analyzes document content to extract metadata
  */
 export async function analyzeDocumentContent(title, content) {
-  if (!openai) {
+  if (!geminiModel && !openai) {
     // Fallback to simple analysis
     return {
       topics: [],
@@ -106,14 +134,8 @@ Respond ONLY with a JSON object in this exact format:
   "summary": "brief one-sentence summary"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
-    });
-
-    return JSON.parse(response.choices[0].message.content);
+    const text = await callAI(prompt);
+    return JSON.parse(text);
   } catch (error) {
     console.error('Error analyzing document:', error);
     return {
@@ -128,7 +150,7 @@ Respond ONLY with a JSON object in this exact format:
  * Scores and ranks documents based on search interpretation
  */
 export async function rankDocuments(interpretation, documents) {
-  if (!openai) {
+  if (!geminiModel && !openai) {
     return fallbackRanking(interpretation, documents);
   }
 
@@ -154,14 +176,8 @@ Respond ONLY with a JSON object containing document IDs ranked by relevance:
   "reasoning": "brief explanation of ranking"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
-    });
-
-    const ranking = JSON.parse(response.choices[0].message.content);
+    const text = await callAI(prompt);
+    const ranking = JSON.parse(text);
     return ranking.rankedIds;
   } catch (error) {
     console.error('Error ranking documents:', error);
@@ -170,7 +186,7 @@ Respond ONLY with a JSON object containing document IDs ranked by relevance:
 }
 
 /**
- * Fallback search when OpenAI is not available
+ * Fallback search when AI is not available
  */
 function fallbackSearch(query, documents) {
   const lowerQuery = query.toLowerCase();
@@ -241,218 +257,129 @@ function fallbackRanking(interpretation, documents) {
 }
 
 /**
- * Generates AI-powered text improvement suggestions
+ * Extracts action items from document content
  */
-export async function suggestTextImprovement(text) {
-  if (!openai) {
-    // Fallback to simple suggestion when OpenAI is not available
-    return {
-      suggestion: text,
-      message: 'AI suggestions not available - OpenAI API key not configured'
-    };
+export async function extractActionItems(documentId, title, content) {
+  if (!geminiModel && !openai) {
+    // Fallback to simple pattern matching
+    return fallbackExtractActionItems(content);
   }
 
   try {
-    const prompt = `You are a professional writing assistant. Analyze the following text and suggest improvements. You can:
-- Rephrase the entire sentence for better clarity
-- Fix grammar and spelling errors
-- Improve word choice and tone
-- Make it more concise
-- Enhance readability
+    const textContent = stripHtml(content);
+    const prompt = `You are an action item detector. Analyze the following document and extract any action items, tasks, or TODOs mentioned.
 
-Only suggest changes if there are meaningful improvements to make. If the text is already good, you can make minor refinements or keep it largely the same.
+Document Title: "${title}"
+Content: "${textContent}"
 
-Original text:
-"${text}"
+Look for:
+- TODO items
+- Action items
+- Tasks to complete
+- Things that need to be done
+- Emails to send
+- Calls to make
+- Deadlines or reminders
+
+For each action item found, extract:
+1. The action description
+2. Any associated email addresses, names, or dates
+3. Priority (if mentioned)
 
 Respond ONLY with a JSON object in this exact format:
 {
-  "suggestion": "the improved version of the text",
-  "changes": "brief description of what you changed and why"
+  "actionItems": [
+    {
+      "description": "the action item description",
+      "details": "additional context or details (emails, dates, etc.)",
+      "priority": "high|medium|low|none"
+    }
+  ]
+}
+
+If no action items are found, return an empty array.`;
+
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+
+    // Add document ID to each action item
+    return result.actionItems.map(item => ({
+      ...item,
+      documentId,
+      documentTitle: title,
+      createdAt: new Date().toISOString()
+    }));
+  } catch (error) {
+    console.error('Error extracting action items:', error);
+    return fallbackExtractActionItems(content);
+  }
+}
+
+/**
+ * Checks if two action items are semantically similar/duplicates
+ * Returns true if tasks are essentially the same despite different wording
+ */
+export async function areTasksSimilar(task1, task2) {
+  if (!geminiModel && !openai) {
+    // Fallback to exact string matching
+    return task1.description.toLowerCase().trim() === task2.description.toLowerCase().trim();
+  }
+
+  try {
+    const prompt = `You are a task similarity detector. Determine if these two tasks are essentially the same action item, even if worded differently.
+
+Task 1: "${task1.description}"
+Details 1: "${task1.details || 'none'}"
+
+Task 2: "${task2.description}"
+Details 2: "${task2.details || 'none'}"
+
+Consider tasks as duplicates if:
+- They describe the same action with the same recipient/subject
+- Minor wording differences like "send email" vs "send an email"
+- Same core action even with slight variations
+
+Do NOT consider as duplicates if:
+- The recipient or subject is different
+- The action is different
+- The context or purpose is different
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "areSimilar": true or false,
+  "reasoning": "brief explanation why they are or aren't similar"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      response_format: { type: 'json_object' }
-    });
-
-    const result = JSON.parse(response.choices[0].message.content);
-    return result;
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+    return result.areSimilar;
   } catch (error) {
-    console.error('Error generating text suggestion:', error);
-    return {
-      suggestion: text,
-      message: 'Error generating suggestion'
-    };
+    console.error('Error checking task similarity:', error);
+    // Fallback to exact string matching on error
+    return task1.description.toLowerCase().trim() === task2.description.toLowerCase().trim();
   }
 }
 
 /**
- * Generates AI-powered summarization of text
+ * Fallback action item extraction using pattern matching
  */
-export async function summarizeText(text) {
-  if (!openai) {
-    // Fallback to simple truncation when OpenAI is not available
-    const maxLength = 100;
-    if (text.length <= maxLength) {
-      return text;
-    }
-    return text.substring(0, maxLength) + '...';
-  }
+function fallbackExtractActionItems(content) {
+  const textContent = stripHtml(content);
+  const actionItems = [];
 
-  try {
-    const prompt = `You are a professional summarization assistant. Create a concise, clear summary of the following text. The summary should:
-- Capture the main points and key information
-- Be significantly shorter than the original
-- Use clear, simple language
-- Maintain the essential meaning
+  // Simple pattern matching for TODO items
+  const todoPattern = /(?:TODO|Action|Task|FIXME|NOTE):\s*([^\n.!?]+)/gi;
+  const matches = textContent.matchAll(todoPattern);
 
-Original text:
-"${text}"
-
-Respond with ONLY the summary text, no additional formatting or explanation.`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.5,
-      max_tokens: 150
+  for (const match of matches) {
+    actionItems.push({
+      description: match[1].trim(),
+      details: '',
+      priority: 'none'
     });
-
-    return response.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('Error generating summary:', error);
-    // Fallback to truncation
-    const maxLength = 100;
-    if (text.length <= maxLength) {
-      return text;
-    }
-    return text.substring(0, maxLength) + '...';
-  }
-}
-
-/**
- * Generates AI-powered definition
- */
-export async function defineText(text) {
-  if (!openai) {
-    return `Definition of "${text}": [AI definitions not available - OpenAI API key not configured]`;
   }
 
-  try {
-    const prompt = `Provide a clear, concise definition for the following term or concept:
-
-"${text}"
-
-Give a straightforward definition that would help someone understand this term. Keep it brief but informative.
-
-Respond with ONLY the definition text, no additional formatting or explanation.`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 200
-    });
-
-    return response.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('Error generating definition:', error);
-    return `Definition of "${text}": [Error generating definition]`;
-  }
-}
-
-/**
- * Generates AI-powered answer to question
- */
-export async function answerQuestion(question) {
-  if (!openai) {
-    return 'AI answers not available - OpenAI API key not configured';
-  }
-
-  try {
-    const prompt = `Answer the following question clearly and concisely:
-
-"${question}"
-
-Provide a helpful, accurate answer. Be direct and informative.
-
-Respond with ONLY the answer, no additional formatting or preamble.`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.5,
-      max_tokens: 250
-    });
-
-    return response.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('Error answering question:', error);
-    return '[Error generating answer]';
-  }
-}
-
-/**
- * Generates AI-powered text edits based on instructions
- */
-export async function editText(text, instruction) {
-  if (!openai) {
-    return text;
-  }
-
-  try {
-    const prompt = `Edit the following text according to this instruction: "${instruction}"
-
-Original text:
-"${text}"
-
-Apply the requested changes and return ONLY the edited text, no explanations or additional formatting.`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 300
-    });
-
-    return response.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('Error editing text:', error);
-    return text;
-  }
-}
-
-/**
- * Generates AI response using custom user-defined prompt
- */
-export async function customAI(text, customPrompt) {
-  if (!openai) {
-    return 'AI not available - OpenAI API key not configured';
-  }
-
-  try {
-    const prompt = `${customPrompt}
-
-Selected text:
-"${text}"
-
-Respond with your analysis, advice, or response based on the instructions above. Be direct and helpful.`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 400
-    });
-
-    return response.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('Error with custom AI:', error);
-    return '[Error generating AI response]';
-  }
+  return actionItems;
 }
 
 /**

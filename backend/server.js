@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, extractActionItems, areTasksSimilar } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -82,6 +82,9 @@ let documents = [
     }
   }
 ];
+
+// In-memory storage for action items
+let actionItems = [];
 
 // Get all documents
 app.get('/api/documents', (req, res) => {
@@ -223,123 +226,78 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
-// AI-powered text suggestion
-app.post('/api/suggest', async (req, res) => {
-  const { text } = req.body;
-
-  if (!text || text.trim().length === 0) {
-    return res.status(400).json({ error: 'Text is required' });
+// Extract action items from a document
+app.post('/api/documents/:id/extract-actions', async (req, res) => {
+  const doc = documents.find(d => d.id === req.params.id);
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found' });
   }
 
   try {
-    const result = await suggestTextImprovement(text);
+    const newActionItems = await extractActionItems(doc.id, doc.title, doc.content);
+
+    // Remove duplicates using AI-based similarity detection
+    const uniqueNewItems = [];
+    for (const newItem of newActionItems) {
+      let isDuplicate = false;
+
+      // Check similarity against existing action items from the same document
+      for (const existingItem of actionItems) {
+        if (existingItem.documentId === newItem.documentId) {
+          const isSimilar = await areTasksSimilar(newItem, existingItem);
+          if (isSimilar) {
+            isDuplicate = true;
+            console.log(`Detected duplicate: "${newItem.description}" similar to "${existingItem.description}"`);
+            break;
+          }
+        }
+      }
+
+      if (!isDuplicate) {
+        uniqueNewItems.push(newItem);
+      }
+    }
+
+    // Add unique items to the action items list
+    actionItems.push(...uniqueNewItems);
+
     res.json({
-      suggestion: result.suggestion,
-      changes: result.changes,
-      message: result.message
+      extractedCount: newActionItems.length,
+      addedCount: uniqueNewItems.length,
+      actionItems: uniqueNewItems
     });
   } catch (error) {
-    console.error('Error generating suggestion:', error);
-    res.status(500).json({ error: 'Failed to generate suggestion' });
+    console.error('Error extracting action items:', error);
+    res.status(500).json({ error: 'Failed to extract action items' });
   }
 });
 
-// AI-powered summarization
-app.post('/api/summarize', async (req, res) => {
-  const { text } = req.body;
-
-  if (!text || text.trim().length === 0) {
-    return res.status(400).json({ error: 'Text is required' });
-  }
-
-  try {
-    const { summarizeText } = await import('./aiService.js');
-    const summary = await summarizeText(text);
-    res.json({ summary });
-  } catch (error) {
-    console.error('Error generating summary:', error);
-    res.status(500).json({ error: 'Failed to generate summary' });
-  }
+// Get all action items
+app.get('/api/action-items', (_req, res) => {
+  res.json(actionItems);
 });
 
-// AI-powered definition
-app.post('/api/define', async (req, res) => {
-  const { text } = req.body;
-
-  if (!text || text.trim().length === 0) {
-    return res.status(400).json({ error: 'Text is required' });
+// Delete an action item
+app.delete('/api/action-items/:index', (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
   }
 
-  try {
-    const { defineText } = await import('./aiService.js');
-    const definition = await defineText(text);
-    res.json({ definition });
-  } catch (error) {
-    console.error('Error generating definition:', error);
-    res.status(500).json({ error: 'Failed to generate definition' });
-  }
+  actionItems.splice(index, 1);
+  res.status(204).send();
 });
 
-// AI-powered question answering
-app.post('/api/answer', async (req, res) => {
-  const { question } = req.body;
-
-  if (!question || question.trim().length === 0) {
-    return res.status(400).json({ error: 'Question is required' });
+// Mark action item as complete
+app.patch('/api/action-items/:index/complete', (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
   }
 
-  try {
-    const { answerQuestion } = await import('./aiService.js');
-    const answer = await answerQuestion(question);
-    res.json({ answer });
-  } catch (error) {
-    console.error('Error answering question:', error);
-    res.status(500).json({ error: 'Failed to answer question' });
-  }
-});
-
-// AI-powered text editing
-app.post('/api/edit', async (req, res) => {
-  const { text, instruction } = req.body;
-
-  if (!text || text.trim().length === 0) {
-    return res.status(400).json({ error: 'Text is required' });
-  }
-
-  if (!instruction || instruction.trim().length === 0) {
-    return res.status(400).json({ error: 'Instruction is required' });
-  }
-
-  try {
-    const { editText } = await import('./aiService.js');
-    const editedText = await editText(text, instruction);
-    res.json({ editedText });
-  } catch (error) {
-    console.error('Error editing text:', error);
-    res.status(500).json({ error: 'Failed to edit text' });
-  }
-});
-
-// AI-powered custom AI with user-defined prompts
-app.post('/api/custom-ai', async (req, res) => {
-  const { text, prompt } = req.body;
-
-  if (!text || text.trim().length === 0) {
-    return res.status(400).json({ error: 'Text is required' });
-  }
-
-  if (!prompt || prompt.trim().length === 0) {
-    return res.status(400).json({ error: 'Prompt is required' });
-  }
-
-  try {
-    const { customAI } = await import('./aiService.js');
-    const result = await customAI(text, prompt);
-    res.json({ result });
-  } catch (error) {
-    console.error('Error with custom AI:', error);
-    res.status(500).json({ error: 'Failed to generate custom AI response' });
-  }
+  actionItems[index].completed = true;
+  actionItems[index].completedAt = new Date().toISOString();
+  res.json(actionItems[index]);
 });
 
 app.listen(PORT, () => {

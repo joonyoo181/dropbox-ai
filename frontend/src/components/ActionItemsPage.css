@@ -1,0 +1,85 @@
+.action-items-page {
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+.page-header {
+  background-color: #fff;
+  padding: 16px 32px;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+}
+
+.page-header-left {
+  display: flex;
+  align-items: center;
+}
+
+.page-header h1 {
+  font-size: 24px;
+  font-weight: 500;
+  color: #202124;
+  margin: 0 0 4px 0;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: #5f6368;
+  margin: 0;
+}
+
+.action-items-content {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+.action-items-page .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.action-items-page .empty-state svg {
+  color: #dadce0;
+  margin-bottom: 24px;
+}
+
+.action-items-page .empty-state h2 {
+  font-size: 24px;
+  font-weight: 400;
+  color: #5f6368;
+  margin: 0 0 12px 0;
+}
+
+.action-items-page .empty-state p {
+  font-size: 14px;
+  color: #80868b;
+  max-width: 500px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Adjust action items section styling when in dedicated page */
+.action-items-page .action-items-section {
+  margin-bottom: 0;
+}
+
+.action-items-page .action-items-title {
+  display: none; /* Hide title since page already has one */
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    padding: 16px 20px;
+  }
+
+  .action-items-content {
+    padding: 0 20px;
+  }
+}

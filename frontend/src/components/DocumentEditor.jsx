@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ReactQuill, { Quill } from 'react-quill';
@@ -92,6 +92,13 @@ function DocumentEditor() {
 
   useEffect(() => {
     fetchDocument();
+
+    // Extract action items when component unmounts (user exits)
+    return () => {
+      if (id) {
+        extractActionItemsOnExit();
+      }
+    };
   }, [id]);
 
   // Scroll to latest item when created
@@ -144,6 +151,14 @@ function DocumentEditor() {
       document.removeEventListener('mousedown', handleClickAway);
     };
   }, [activeHighlightId, tabs, customTabs, getTabColor]);
+  const extractActionItemsOnExit = async () => {
+    try {
+      await axios.post(`/api/documents/${id}/extract-actions`);
+      console.log('Action items extracted on exit');
+    } catch (error) {
+      console.error('Error extracting action items:', error);
+    }
+  };
 
   const fetchDocument = async () => {
     try {
@@ -201,6 +216,7 @@ function DocumentEditor() {
   const handleContentChange = (value) => {
     setContent(value);
 
+    // Auto-save after 1 second of inactivity
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }

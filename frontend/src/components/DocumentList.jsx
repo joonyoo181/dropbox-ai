@@ -1,16 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import Sidebar, { HamburgerButton } from './Sidebar';
+import ActionItemsPage from './ActionItemsPage';
 import './DocumentList.css';
 
 function DocumentList() {
   const [documents, setDocuments] = useState([]);
   const [allDocuments, setAllDocuments] = useState([]);
+  const [currentTab, setCurrentTab] = useState('documents');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchInterpretation, setSearchInterpretation] = useState(null);
+  const sidebarRef = useRef(null);
   const navigate = useNavigate();
+
+  const handleHamburgerClick = () => {
+    if (sidebarRef.current) {
+      sidebarRef.current.toggle();
+    }
+  };
 
   useEffect(() => {
     fetchDocuments();
@@ -93,47 +103,61 @@ function DocumentList() {
   }
 
   return (
-    <div className="document-list-container">
-      <header className="header">
-        <h1>DocEditor</h1>
-        <button className="new-doc-btn" onClick={createNewDocument}>
-          + New Document
-        </button>
-      </header>
+    <div className="app-container">
+      <Sidebar
+        ref={sidebarRef}
+        currentTab={currentTab}
+        onTabChange={setCurrentTab}
+      />
 
-      <div className="search-container">
-        <div className="search-box">
-          <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search documents... (e.g., 'meeting notes from 12/2' or 'public health essay')"
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-          {searchQuery && (
-            <button className="clear-search-btn" onClick={clearSearch}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          )}
-        </div>
-        {searching && <p className="search-status">Searching with AI...</p>}
-        {searchInterpretation && (
-          <div className="search-interpretation">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M12 16v-4M12 8h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span>AI understood: {searchInterpretation.searchStrategy}</span>
-          </div>
-        )}
-      </div>
+      <div className="main-content">
+        {currentTab === 'action-items' ? (
+          <ActionItemsPage hamburgerButton={<HamburgerButton onClick={handleHamburgerClick} />} />
+        ) : (
+          <div className="document-list-container">
+            <header className="header">
+              <div className="header-left">
+                <HamburgerButton onClick={handleHamburgerClick} />
+                <h1>Documents</h1>
+              </div>
+              <button className="new-doc-btn" onClick={createNewDocument}>
+                + New Document
+              </button>
+            </header>
 
-      <div className="documents-grid">
+            <div className="search-container">
+              <div className="search-box">
+                <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search documents... (e.g., 'meeting notes from 12/2' or 'public health essay')"
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                />
+                {searchQuery && (
+                  <button className="clear-search-btn" onClick={clearSearch}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {searching && <p className="search-status">Searching with AI...</p>}
+              {searchInterpretation && (
+                <div className="search-interpretation">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 16v-4M12 8h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span>AI understood: {searchInterpretation.searchStrategy}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="documents-grid">
         {documents.length === 0 ? (
           <div className="empty-state">
             <h2>{searchQuery ? 'No documents found' : 'No documents yet'}</h2>
@@ -181,6 +205,9 @@ function DocumentList() {
               </button>
             </div>
           ))
+        )}
+            </div>
+          </div>
         )}
       </div>
     </div>
