@@ -237,7 +237,7 @@
   z-index: 1000;
   animation: fadeIn 0.2s ease-out;
   margin-top: 4px;
-  margin-left: 48px;
+  margin-left: 0;
 }
 
 @keyframes fadeIn {
@@ -347,7 +347,7 @@
   z-index: 1000;
   animation: fadeIn 0.2s ease-out;
   margin-top: 4px;
-  margin-left: 48px;
+  margin-left: 0;
 }
 
 .suggestion-loading span {

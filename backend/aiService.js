@@ -1,32 +1,65 @@
 // IMPORTANT: Load config first to ensure we use backend/.env
 import './config.js';
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
+// Get AI provider from environment (defaults to 'gemini')
+const AI_PROVIDER = process.env.AI_PROVIDER || 'gemini';
+
+let genAI = null;
+let geminiModel = null;
 let openai = null;
 
-// Initialize OpenAI only if API key is available and not a placeholder
-if (process.env.OPENAI_API_KEY) {
+// Initialize the selected AI provider
+if (AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY) {
+  try {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    geminiModel = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        responseMimeType: 'application/json',
+      }
+    });
+    console.log("AI Provider: Gemini (gemini-2.0-flash-exp)");
+  } catch (error) {
+    console.log("Gemini initialization error: ", error);
+    genAI = null;
+    geminiModel = null;
+  }
+} else if (AI_PROVIDER === 'openai' && process.env.OPENAI_API_KEY) {
   try {
     openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
-
-    // Test the API key
-    // TODO: uncomment this to check for valid key
-    //  await openai.chat.completions.create({
-    //     model: 'gpt-4o-mini',
-    //     messages: [{ role: 'user', content: 'JSON' }],
-    //     temperature: 0.3,
-    //     response_format: { type: 'json_object' }
-    //   });
-    
-    console.log("Key valid: ", process.env.OPENAI_API_KEY);
+    console.log("AI Provider: OpenAI (gpt-4o-mini)");
   } catch (error) {
-    console.log("Key invalid: ", error);
+    console.log("OpenAI initialization error: ", error);
     openai = null;
   }
+} else {
+  console.log(`AI Provider not configured. Set AI_PROVIDER to 'openai' or 'gemini' and provide the corresponding API key.`);
+}
 
+/**
+ * Helper function to call AI API (supports both OpenAI and Gemini)
+ */
+async function callAI(prompt) {
+  if (AI_PROVIDER === 'openai' && openai) {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      response_format: { type: 'json_object' }
+    });
+    return response.choices[0].message.content;
+  } else if (AI_PROVIDER === 'gemini' && geminiModel) {
+    const result = await geminiModel.generateContent(prompt);
+    const response = result.response;
+    return response.text();
+  } else {
+    throw new Error('No AI provider configured');
+  }
 }
 
 /**
@@ -34,7 +67,7 @@ if (process.env.OPENAI_API_KEY) {
  * Returns structured search criteria
  */
 export async function interpretSearchQuery(query, documents) {
-  if (!openai) {
+  if (!geminiModel && !openai) {
     // Fallback to simple text matching if no API key
     return fallbackSearch(query, documents);
   }
@@ -63,15 +96,10 @@ Respond ONLY with a JSON object in this exact format:
   "searchStrategy": "brief explanation of what to look for"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
-    });
-    console.log(response)
+    const text = await callAI(prompt);
+    console.log(text);
 
-    const interpretation = JSON.parse(response.choices[0].message.content);
+    const interpretation = JSON.parse(text);
     return interpretation;
   } catch (error) {
     console.error('Error interpreting search query:', error);
@@ -83,7 +111,7 @@ Respond ONLY with a JSON object in this exact format:
  * Analyzes document content to extract metadata
  */
 export async function analyzeDocumentContent(title, content) {
-  if (!openai) {
+  if (!geminiModel && !openai) {
     // Fallback to simple analysis
     return {
       topics: [],
@@ -106,14 +134,8 @@ Respond ONLY with a JSON object in this exact format:
   "summary": "brief one-sentence summary"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
-    });
-
-    return JSON.parse(response.choices[0].message.content);
+    const text = await callAI(prompt);
+    return JSON.parse(text);
   } catch (error) {
     console.error('Error analyzing document:', error);
     return {
@@ -128,7 +150,7 @@ Respond ONLY with a JSON object in this exact format:
  * Scores and ranks documents based on search interpretation
  */
 export async function rankDocuments(interpretation, documents) {
-  if (!openai) {
+  if (!geminiModel && !openai) {
     return fallbackRanking(interpretation, documents);
   }
 
@@ -154,14 +176,8 @@ Respond ONLY with a JSON object containing document IDs ranked by relevance:
   "reasoning": "brief explanation of ranking"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
-    });
-
-    const ranking = JSON.parse(response.choices[0].message.content);
+    const text = await callAI(prompt);
+    const ranking = JSON.parse(text);
     return ranking.rankedIds;
   } catch (error) {
     console.error('Error ranking documents:', error);
@@ -170,7 +186,7 @@ Respond ONLY with a JSON object containing document IDs ranked by relevance:
 }
 
 /**
- * Fallback search when OpenAI is not available
+ * Fallback search when AI is not available
  */
 function fallbackSearch(query, documents) {
   const lowerQuery = query.toLowerCase();
@@ -244,11 +260,11 @@ function fallbackRanking(interpretation, documents) {
  * Generates AI-powered text improvement suggestions
  */
 export async function suggestTextImprovement(text) {
-  if (!openai) {
-    // Fallback to simple suggestion when OpenAI is not available
+  if (!geminiModel && !openai) {
+    // Fallback to simple suggestion when AI is not available
     return {
       suggestion: text,
-      message: 'AI suggestions not available - OpenAI API key not configured'
+      message: 'AI suggestions not available - API key not configured'
     };
   }
 
@@ -271,15 +287,9 @@ Respond ONLY with a JSON object in this exact format:
   "changes": "brief description of what you changed and why"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      response_format: { type: 'json_object' }
-    });
-
-    const result = JSON.parse(response.choices[0].message.content);
-    return result;
+    const responseText = await callAI(prompt);
+    const parsedResult = JSON.parse(responseText);
+    return parsedResult;
   } catch (error) {
     console.error('Error generating text suggestion:', error);
     return {
