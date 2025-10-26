@@ -7,7 +7,7 @@ import bodyParser from 'body-parser';
 import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand, generateWordEdit, processEditCommand } from './aiService.js';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
@@ -498,9 +498,6 @@ app.post('/api/ai/process-edit', async (req, res) => {
 // For Vercel serverless deployment
 export default app;
 
-// For local development
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
