@@ -1195,6 +1195,41 @@ function DocumentEditor() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Cmd/Ctrl + \ to remove all formatting
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+
+        const quill = quillRef.current?.getEditor();
+        if (!quill) return;
+
+        const selection = quill.getSelection();
+        if (!selection || selection.length === 0) return;
+
+        // Get the text content
+        const text = quill.getText(selection.index, selection.length);
+
+        // Remove all formatting by deleting and re-inserting as plain text
+        quill.deleteText(selection.index, selection.length);
+        quill.insertText(selection.index, text, {
+          bold: false,
+          italic: false,
+          underline: false,
+          strike: false,
+          color: false,
+          background: false,
+          size: false,
+          font: false,
+          link: false
+        });
+
+        // Restore selection
+        quill.setSelection(selection.index, selection.length);
+        setContent(quill.root.innerHTML);
+        saveDocument(title, quill.root.innerHTML, tabs, customTabs);
+
+        return;
+      }
+
       // Cmd/Ctrl + E to show command palette
       if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
         e.preventDefault();
