@@ -241,6 +241,55 @@ function fallbackRanking(interpretation, documents) {
 }
 
 /**
+ * Generates AI-powered text improvement suggestions
+ */
+export async function suggestTextImprovement(text) {
+  if (!openai) {
+    // Fallback to simple suggestion when OpenAI is not available
+    return {
+      suggestion: text,
+      message: 'AI suggestions not available - OpenAI API key not configured'
+    };
+  }
+
+  try {
+    const prompt = `You are a professional writing assistant. Analyze the following text and suggest improvements. You can:
+- Rephrase the entire sentence for better clarity
+- Fix grammar and spelling errors
+- Improve word choice and tone
+- Make it more concise
+- Enhance readability
+
+Only suggest changes if there are meaningful improvements to make. If the text is already good, you can make minor refinements or keep it largely the same.
+
+Original text:
+"${text}"
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "suggestion": "the improved version of the text",
+  "changes": "brief description of what you changed and why"
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      response_format: { type: 'json_object' }
+    });
+
+    const result = JSON.parse(response.choices[0].message.content);
+    return result;
+  } catch (error) {
+    console.error('Error generating text suggestion:', error);
+    return {
+      suggestion: text,
+      message: 'Error generating suggestion'
+    };
+  }
+}
+
+/**
  * Strips HTML tags from content
  */
 function stripHtml(html) {

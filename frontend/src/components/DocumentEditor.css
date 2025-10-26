@@ -220,3 +220,141 @@
 .error-container button:hover {
   background-color: #1557b0;
 }
+
+/* AI Suggestion Styles */
+.editor-with-suggestions {
+  position: relative;
+}
+
+.suggestion-overlay {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 16px 20px;
+  max-width: 700px;
+  width: 90%;
+  z-index: 1000;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.suggestion-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.original-text {
+  position: relative;
+  color: #5f6368;
+  text-decoration: line-through;
+  text-decoration-color: #ea4335;
+  text-decoration-thickness: 2px;
+  padding: 4px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.suggested-text {
+  background-color: #e8f5e9;
+  color: #137333;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border-left: 3px solid #34a853;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.suggestion-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+  min-width: 36px;
+  height: 36px;
+}
+
+.accept-btn {
+  background-color: #34a853;
+  color: white;
+}
+
+.accept-btn:hover {
+  background-color: #2d8e47;
+  transform: scale(1.05);
+}
+
+.reject-btn {
+  background-color: #ea4335;
+  color: white;
+}
+
+.reject-btn:hover {
+  background-color: #c5371d;
+  transform: scale(1.05);
+}
+
+.suggestion-loading {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1000;
+  animation: slideUp 0.3s ease-out;
+}
+
+.suggestion-loading span {
+  font-size: 14px;
+  color: #5f6368;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #1a73e8;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

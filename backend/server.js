@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -177,6 +177,27 @@ app.post('/api/search', async (req, res) => {
   } catch (error) {
     console.error('Error processing search:', error);
     res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// AI-powered text suggestion
+app.post('/api/suggest', async (req, res) => {
+  const { text } = req.body;
+
+  if (!text || text.trim().length === 0) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+
+  try {
+    const result = await suggestTextImprovement(text);
+    res.json({
+      suggestion: result.suggestion,
+      changes: result.changes,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Error generating suggestion:', error);
+    res.status(500).json({ error: 'Failed to generate suggestion' });
   }
 });
 
