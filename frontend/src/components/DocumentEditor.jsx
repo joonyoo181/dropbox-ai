@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ReactQuill, { Quill } from 'react-quill';
@@ -224,40 +224,6 @@ function DocumentEditor() {
       saveDocument(title, value);
     }, 1000);
   };
-
-  // Handle text selection and show command palette
-  const handleTextSelection = useCallback(() => {
-    const quill = quillRef.current?.getEditor();
-    if (!quill) return;
-
-    const selection = quill.getSelection();
-    if (!selection || selection.length === 0) {
-      setShowCommandPalette(false);
-      return;
-    }
-
-    const text = quill.getText(selection.index, selection.length).trim();
-    if (!text) return;
-
-    setSelectedText(text);
-    setSelectedRange(selection);
-
-    // Get cursor position for command palette
-    const bounds = quill.getBounds(selection.index, selection.length);
-    const editorContainer = quill.container.getBoundingClientRect();
-
-    setCommandPosition({
-      top: editorContainer.top + bounds.bottom + window.scrollY + 10,
-      left: editorContainer.left + bounds.left + window.scrollX
-    });
-
-    setShowCommandPalette(true);
-    setCommandInput('');
-    setAiResponse('');
-
-    // Apply a temporary highlight to keep selection visible
-    quill.formatText(selection.index, selection.length, 'background', '#B3D4FF');
-  }, []);
 
   // Create custom tab
   const handleCreateCustomTab = useCallback(() => {
@@ -694,52 +660,6 @@ function DocumentEditor() {
       console.log('Missing editor container or bounds:', { editorContainer: !!editorContainer, bounds });
     }
   }, [customTabs, tabs, getTabColor, activeHighlightId]);
-
-  // Delete an item from a tab
-  const handleDeleteItem = useCallback((tabName, itemId) => {
-    // First, find the item to get its position and length
-    const customTab = customTabs.find(t => t.id === tabName);
-    let itemToDelete = null;
-
-    if (customTab) {
-      itemToDelete = customTab.items.find(item => item.id === itemId);
-    } else {
-      itemToDelete = tabs[tabName]?.find(item => item.id === itemId);
-    }
-
-    // Remove the highlight from the document
-    if (itemToDelete && itemToDelete.position !== undefined && itemToDelete.length !== undefined) {
-      const quill = quillRef.current?.getEditor();
-      if (quill) {
-        // Remove background color (set to false removes the formatting)
-        quill.formatText(itemToDelete.position, itemToDelete.length, 'background', false);
-        setContent(quill.root.innerHTML);
-      }
-    }
-
-    // Now remove the item from the tab
-    if (customTab) {
-      const updatedCustomTabs = customTabs.map(t => {
-        if (t.id === tabName) {
-          return { ...t, items: t.items.filter(item => item.id !== itemId) };
-        }
-        return t;
-      });
-      setCustomTabs(updatedCustomTabs);
-
-      const quill = quillRef.current?.getEditor();
-      saveDocument(title, quill ? quill.root.innerHTML : content, tabs, updatedCustomTabs);
-    } else {
-      const updatedTabs = {
-        ...tabs,
-        [tabName]: tabs[tabName].filter(item => item.id !== itemId)
-      };
-      setTabs(updatedTabs);
-
-      const quill = quillRef.current?.getEditor();
-      saveDocument(title, quill ? quill.root.innerHTML : content, updatedTabs, customTabs);
-    }
-  }, [tabs, customTabs, title, content]);
 
   // Toggle toolbar panel
   const toggleToolPanel = (panelName) => {
