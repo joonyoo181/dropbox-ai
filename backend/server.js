@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -276,6 +276,40 @@ app.patch('/api/action-items/:index/complete', (req, res) => {
   actionItems[index].completed = true;
   actionItems[index].completedAt = new Date().toISOString();
   res.json(actionItems[index]);
+});
+
+// Draft email from action item
+app.post('/api/action-items/:index/draft-email', async (req, res) => {
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= actionItems.length) {
+    return res.status(404).json({ error: 'Action item not found' });
+  }
+
+  const actionItem = actionItems[index];
+  
+  if (!actionItem.isEmailTask) {
+    return res.status(400).json({ error: 'This action item is not an email task' });
+  }
+
+  try {
+    // Get the source document for context
+    const sourceDoc = documents.find(d => d.id === actionItem.documentId);
+    const documentContext = sourceDoc ? sourceDoc.content : '';
+
+    // Draft the email
+    const emailDraft = await draftEmailFromTask(actionItem, documentContext);
+
+    // Store the draft in the action item
+    actionItems[index].emailDraft = emailDraft;
+
+    res.json({
+      success: true,
+      emailDraft
+    });
+  } catch (error) {
+    console.error('Error drafting email:', error);
+    res.status(500).json({ error: 'Failed to draft email' });
+  }
 });
 
 app.listen(PORT, () => {

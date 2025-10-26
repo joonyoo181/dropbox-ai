@@ -300,12 +300,22 @@ Respond ONLY with a JSON object in this exact format:
 }
 
 /**
+ * Detects if an action item is email-related
+ */
+function isEmailTask(description, details) {
+  const text = `${description} ${details || ''}`.toLowerCase();
+  const hasEmailKeyword = text.includes('email') || text.includes('e-mail');
+  const hasEmailAddress = /\S+@\S+\.\S+/.test(text);
+  return hasEmailKeyword || hasEmailAddress;
+}
+
+/**
  * Extracts action items from document content
  */
 export async function extractActionItems(documentId, title, content) {
   if (!geminiModel && !openai) {
     // Fallback to simple pattern matching
-    return fallbackExtractActionItems(content);
+    return fallbackExtractActionItems(documentId, title, content);
   }
 
   try {
@@ -345,16 +355,18 @@ If no action items are found, return an empty array.`;
     const text = await callAI(prompt);
     const result = JSON.parse(text);
 
-    // Add document ID to each action item
+    // Add document ID and email detection to each action item
     return result.actionItems.map(item => ({
       ...item,
       documentId,
       documentTitle: title,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      isEmailTask: isEmailTask(item.description, item.details),
+      emailDraft: null
     }));
   } catch (error) {
     console.error('Error extracting action items:', error);
-    return fallbackExtractActionItems(content);
+    return fallbackExtractActionItems(documentId, title, content);
   }
 }
 
@@ -404,9 +416,102 @@ Respond ONLY with a JSON object in this exact format:
 }
 
 /**
+ * Drafts an email from an action item task
+ */
+export async function draftEmailFromTask(task, documentContext) {
+  if (!geminiModel && !openai) {
+    // Fallback to simple template
+    return fallbackEmailDraft(task);
+  }
+
+  try {
+    const prompt = `You are an email writing assistant. Draft a professional email based on this action item.
+
+Action item: "${task.description}"
+Additional details: "${task.details || 'none'}"
+Document title: "${task.documentTitle || 'Untitled'}"
+Document context: "${documentContext ? documentContext.substring(0, 500) : 'none'}"
+
+Extract and provide:
+1. Recipient email address (if mentioned, otherwise leave as empty string)
+2. Appropriate subject line based on the context
+3. Professional email body with proper greeting and signature
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "recipient": "email@example.com or empty string if not found",
+  "subject": "Subject line",
+  "body": "Email body with proper greeting and closing\\n\\nBest regards"
+}`;
+
+    const text = await callAI(prompt);
+    const result = JSON.parse(text);
+    
+    // Generate mailto link
+    const mailtoLink = createMailtoLink(result.recipient, result.subject, result.body);
+    
+    return {
+      to: result.recipient,
+      subject: result.subject,
+      body: result.body,
+      mailtoLink,
+      draftedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error drafting email:', error);
+    return fallbackEmailDraft(task);
+  }
+}
+
+/**
+ * Fallback email draft when AI is not available
+ */
+function fallbackEmailDraft(task) {
+  // Try to extract email from description
+  const emailMatch = task.description.match(/\S+@\S+\.\S+/);
+  const recipient = emailMatch ? emailMatch[0] : '';
+  
+  // Simple subject based on description
+  const subject = task.description.replace(/email|send|to/gi, '').trim().substring(0, 50);
+  
+  // Simple body template
+  const body = `Hi,\n\nRegarding: ${task.description}\n\n[Please add your message here]\n\nBest regards`;
+  
+  const mailtoLink = createMailtoLink(recipient, subject, body);
+  
+  return {
+    to: recipient,
+    subject: subject || 'Follow-up',
+    body,
+    mailtoLink,
+    draftedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Creates a mailto link from email components
+ */
+function createMailtoLink(to, subject, body) {
+  const params = [];
+  
+  if (subject) {
+    params.push(`subject=${encodeURIComponent(subject)}`);
+  }
+  
+  if (body) {
+    params.push(`body=${encodeURIComponent(body)}`);
+  }
+  
+  const recipientPart = to || '';
+  const paramString = params.join('&');
+  
+  return `mailto:${recipientPart}${paramString ? '?' + paramString : ''}`;
+}
+
+/**
  * Fallback action item extraction using pattern matching
  */
-function fallbackExtractActionItems(content) {
+function fallbackExtractActionItems(documentId, title, content) {
   const textContent = stripHtml(content);
   const actionItems = [];
 
@@ -415,10 +520,16 @@ function fallbackExtractActionItems(content) {
   const matches = textContent.matchAll(todoPattern);
 
   for (const match of matches) {
+    const description = match[1].trim();
     actionItems.push({
-      description: match[1].trim(),
+      description,
       details: '',
-      priority: 'none'
+      priority: 'none',
+      documentId,
+      documentTitle: title,
+      createdAt: new Date().toISOString(),
+      isEmailTask: isEmailTask(description, ''),
+      emailDraft: null
     });
   }
 
