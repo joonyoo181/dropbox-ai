@@ -290,6 +290,172 @@ Respond ONLY with a JSON object in this exact format:
 }
 
 /**
+ * Generates AI-powered summarization of text
+ */
+export async function summarizeText(text) {
+  if (!openai) {
+    // Fallback to simple truncation when OpenAI is not available
+    const maxLength = 100;
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return text.substring(0, maxLength) + '...';
+  }
+
+  try {
+    const prompt = `You are a professional summarization assistant. Create a concise, clear summary of the following text. The summary should:
+- Capture the main points and key information
+- Be significantly shorter than the original
+- Use clear, simple language
+- Maintain the essential meaning
+
+Original text:
+"${text}"
+
+Respond with ONLY the summary text, no additional formatting or explanation.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.5,
+      max_tokens: 150
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error generating summary:', error);
+    // Fallback to truncation
+    const maxLength = 100;
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return text.substring(0, maxLength) + '...';
+  }
+}
+
+/**
+ * Generates AI-powered definition
+ */
+export async function defineText(text) {
+  if (!openai) {
+    return `Definition of "${text}": [AI definitions not available - OpenAI API key not configured]`;
+  }
+
+  try {
+    const prompt = `Provide a clear, concise definition for the following term or concept:
+
+"${text}"
+
+Give a straightforward definition that would help someone understand this term. Keep it brief but informative.
+
+Respond with ONLY the definition text, no additional formatting or explanation.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 200
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error generating definition:', error);
+    return `Definition of "${text}": [Error generating definition]`;
+  }
+}
+
+/**
+ * Generates AI-powered answer to question
+ */
+export async function answerQuestion(question) {
+  if (!openai) {
+    return 'AI answers not available - OpenAI API key not configured';
+  }
+
+  try {
+    const prompt = `Answer the following question clearly and concisely:
+
+"${question}"
+
+Provide a helpful, accurate answer. Be direct and informative.
+
+Respond with ONLY the answer, no additional formatting or preamble.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.5,
+      max_tokens: 250
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error answering question:', error);
+    return '[Error generating answer]';
+  }
+}
+
+/**
+ * Generates AI-powered text edits based on instructions
+ */
+export async function editText(text, instruction) {
+  if (!openai) {
+    return text;
+  }
+
+  try {
+    const prompt = `Edit the following text according to this instruction: "${instruction}"
+
+Original text:
+"${text}"
+
+Apply the requested changes and return ONLY the edited text, no explanations or additional formatting.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 300
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error editing text:', error);
+    return text;
+  }
+}
+
+/**
+ * Generates AI response using custom user-defined prompt
+ */
+export async function customAI(text, customPrompt) {
+  if (!openai) {
+    return 'AI not available - OpenAI API key not configured';
+  }
+
+  try {
+    const prompt = `${customPrompt}
+
+Selected text:
+"${text}"
+
+Respond with your analysis, advice, or response based on the instructions above. Be direct and helpful.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 400
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error with custom AI:', error);
+    return '[Error generating AI response]';
+  }
+}
+
+/**
  * Strips HTML tags from content
  */
 function stripHtml(html) {
