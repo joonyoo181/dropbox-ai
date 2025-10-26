@@ -135,6 +135,8 @@
   position: relative;
   z-index: 50;
   flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .toolbar-buttons {
@@ -1387,4 +1389,99 @@
 .add-tab-btn:hover {
   background: var(--primary-blue) !important;
   color: white !important;
+}
+
+/* Edit diff styles */
+.edit-diff-container {
+  margin: 12px 0;
+}
+
+.edit-section {
+  margin-bottom: 12px;
+}
+
+.edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #5f6368;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.edit-text {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.edited-text {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-left: 3px solid #66bb6a;
+  font-weight: 500;
+}
+
+.edit-explanation {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #5f6368;
+  font-style: italic;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.edit-accept-btn,
+.edit-reject-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-accept-btn {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.edit-accept-btn:hover {
+  background-color: #66bb6a;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 187, 106, 0.3);
+}
+
+.edit-reject-btn {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.edit-reject-btn:hover {
+  background-color: #ef5350;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(239, 83, 80, 0.3);
+}
+
+.edit-accept-btn:active,
+.edit-reject-btn:active {
+  transform: translateY(0);
 }

@@ -4,7 +4,7 @@ import './config.js';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand, generateWordEdit } from './aiService.js';
+import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand, generateWordEdit, processEditCommand } from './aiService.js';
 
 const app = express();
 const PORT = 3001;
@@ -449,6 +449,23 @@ app.post('/api/ai/process-command', async (req, res) => {
   } catch (error) {
     console.error('Error processing AI command:', error);
     res.status(500).json({ error: 'Failed to process AI command' });
+  }
+});
+
+// Process edit command for highlighted text
+app.post('/api/ai/process-edit', async (req, res) => {
+  const { originalText, editInstruction } = req.body;
+
+  if (!originalText || !editInstruction) {
+    return res.status(400).json({ error: 'Missing required fields: originalText and editInstruction' });
+  }
+
+  try {
+    const result = await processEditCommand(originalText, editInstruction);
+    res.json(result);
+  } catch (error) {
+    console.error('Error processing edit command:', error);
+    res.status(500).json({ error: 'Failed to process edit command' });
   }
 });
 
