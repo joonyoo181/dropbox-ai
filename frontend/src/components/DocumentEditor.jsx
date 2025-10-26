@@ -391,6 +391,10 @@ function DocumentEditor() {
         tabName = 'edits';
         useAI = true;
         customPrompt = cmd.substring(4).trim(); // Everything after 'e/ai'
+      } else if (cmd.startsWith('e/')) {
+        tabName = 'edits';
+        useAI = false;
+        customPrompt = cmd.substring(2).trim(); // Everything after 'e/' is the manual comment
       } else if (cmd.startsWith('s/ai')) {
         tabName = 'summary';
         useAI = true;
@@ -415,6 +419,8 @@ function DocumentEditor() {
         tabName = 'questions';
         useAI = false;
         customPrompt = cmd.substring(2).trim(); // Everything after 'q/' is the manual comment
+      } else if (cmd === 'e') {
+        tabName = 'edits';
       } else if (cmd === 's') {
         tabName = 'summary';
       } else if (cmd === 'd') {
@@ -1870,10 +1876,10 @@ function DocumentEditor() {
               )}
             </form>
             <div className="command-hints">
-              <div className="hint"><kbd>s/ai</kbd> Summary</div>
-              <div className="hint"><kbd>d/ai</kbd> Definition</div>
-              <div className="hint"><kbd>q/ai</kbd> Question</div>
-              <div className="hint"><kbd>e/ai</kbd> Edit</div>
+              <div className="hint"><kbd>s</kbd> <kbd>s/</kbd> <kbd>s/ai</kbd> Summary</div>
+              <div className="hint"><kbd>d</kbd> <kbd>d/</kbd> <kbd>d/ai</kbd> Definition</div>
+              <div className="hint"><kbd>q</kbd> <kbd>q/</kbd> <kbd>q/ai</kbd> Question</div>
+              <div className="hint"><kbd>e</kbd> <kbd>e/</kbd> <kbd>e/ai</kbd> Edit</div>
               <div className="hint"><kbd>Esc</kbd> Cancel</div>
             </div>
           </div>
