@@ -90,6 +90,42 @@ function DocumentEditor() {
     return customTab?.color || (isDark ? '#BDBDBD' : '#F5F5F5');
   };
 
+  // Adjust command palette position to keep it within viewport
+  const adjustPositionToViewport = (initialTop, initialLeft) => {
+    // Approximate dimensions of the command palette
+    const PALETTE_WIDTH = 350;
+    const PALETTE_HEIGHT = 280;
+    const MARGIN = 10;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let adjustedTop = initialTop;
+    let adjustedLeft = initialLeft;
+
+    // Adjust horizontal position
+    if (initialLeft + PALETTE_WIDTH > viewportWidth) {
+      // Too far right, shift left
+      adjustedLeft = viewportWidth - PALETTE_WIDTH - MARGIN;
+    }
+    if (adjustedLeft < MARGIN) {
+      // Too far left, shift right
+      adjustedLeft = MARGIN;
+    }
+
+    // Adjust vertical position
+    if (initialTop + PALETTE_HEIGHT > viewportHeight) {
+      // Too far down, position above the selection instead
+      adjustedTop = initialTop - PALETTE_HEIGHT - 40; // 40 is approximate selection height
+    }
+    if (adjustedTop < MARGIN) {
+      // Too far up, shift down
+      adjustedTop = MARGIN;
+    }
+
+    return { top: adjustedTop, left: adjustedLeft };
+  };
+
   useEffect(() => {
     fetchDocument();
 
@@ -1020,6 +1056,39 @@ function DocumentEditor() {
     }
   }, [showCommandPalette]);
 
+  // Click away handler to close command palette
+  useEffect(() => {
+    if (!showCommandPalette) return;
+
+    const handleClickOutside = (e) => {
+      // Check if click is outside the command palette
+      const palette = document.querySelector('.command-palette');
+      if (palette && !palette.contains(e.target)) {
+        // Close the palette
+        setShowCommandPalette(false);
+        setCommandInput('');
+        setAiResponse('');
+
+        // Remove any temporary highlight
+        const quill = quillRef.current?.getEditor();
+        if (quill && selectedRange) {
+          quill.formatText(selectedRange.index, selectedRange.length, 'background', false);
+          setContent(quill.root.innerHTML);
+        }
+      }
+    };
+
+    // Add listener with a slight delay to avoid immediate closing
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCommandPalette, selectedRange]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1046,11 +1115,13 @@ function DocumentEditor() {
         const bounds = quill.getBounds(selection.index, selection.length);
         const editorContainer = quill.container.getBoundingClientRect();
 
-        setCommandPosition({
-          top: editorContainer.top + bounds.bottom + window.scrollY + 10,
-          left: editorContainer.left + bounds.left + window.scrollX
-        });
+        const initialTop = editorContainer.top + bounds.bottom + window.scrollY + 10;
+        const initialLeft = editorContainer.left + bounds.left + window.scrollX;
 
+        // Adjust position to keep palette within viewport
+        const adjustedPosition = adjustPositionToViewport(initialTop, initialLeft);
+
+        setCommandPosition(adjustedPosition);
         setShowCommandPalette(true);
         setCommandInput('');
         setAiResponse('');
