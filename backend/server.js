@@ -7,16 +7,11 @@ import bodyParser from 'body-parser';
 import { interpretSearchQuery, analyzeDocumentContent, rankDocuments, suggestTextImprovement, extractActionItems, areTasksSimilar, draftEmailFromTask, createCalendarEventFromTask, processAICommand, generateWordEdit, processEditCommand } from './aiService.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-
-// Simple root endpoint so Render knows server is running
-app.get('/', (req, res) => {
-  res.json({ status: 'ok' });
-});
 
 // In-memory storage for documents (replace with database in production)
 let documents = [
@@ -503,7 +498,9 @@ app.post('/api/ai/process-edit', async (req, res) => {
 // For Vercel serverless deployment
 export default app;
 
-// Start server on 0.0.0.0 for Render (and localhost)
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
