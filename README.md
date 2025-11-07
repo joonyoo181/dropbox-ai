@@ -1,4 +1,4 @@
-# PickupAI
+# Dropbox AI (a.k.a. PickupAI)
 
 "We pick up where Dropbox dropped off"
 
